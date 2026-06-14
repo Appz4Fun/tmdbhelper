@@ -244,6 +244,41 @@ src/
 tests/               round-trip + schema-fidelity + state tests, fixtures
 ```
 
+## MCP Setup
+
+This project uses a Claude Code MCP server (`@steipete/claude-code-mcp`) to enable
+agent-in-agent delegation for complex tasks from other MCP clients.
+
+### Current MCP server
+
+| Server | Type | Scope | Status |
+|--------|------|-------|--------|
+| `claude-code-mcp` | stdio | local | `✔ Connected` |
+
+### Tool available
+
+| Tool | Purpose |
+|------|---------|
+| `claude_code` | Delegates coding, file, Git, and terminal tasks to a separate Claude Code subprocess |
+
+### Add it
+
+```bash
+claude mcp add claude-code-mcp -- npx -y @steipete/claude-code-mcp
+```
+
+### Verify it
+
+```bash
+claude mcp get claude-code-mcp
+```
+
+To remove:
+
+```bash
+claude mcp remove claude-code-mcp -s local
+```
+
 ## License
 
 GPLv3 — see [LICENSE](LICENSE).
