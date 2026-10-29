@@ -75,9 +75,10 @@ impl TextureDb {
             "INSERT OR IGNORE INTO texture (url, cachedurl, imagehash, lasthashcheck) VALUES (?1, ?2, '', ?3)",
         )?.execute(params![url, cached_url, &now])?;
 
-        let id: i64 = self.conn.prepare_cached(
-            "SELECT id FROM texture WHERE url=?1",
-        )?.query_row(params![url], |r| r.get(0))?;
+        let id: i64 = self
+            .conn
+            .prepare_cached("SELECT id FROM texture WHERE url=?1")?
+            .query_row(params![url], |r| r.get(0))?;
 
         if width > 0 || height > 0 {
             self.conn.prepare_cached(
@@ -88,10 +89,7 @@ impl TextureDb {
         Ok(id)
     }
 
-    pub fn insert_texture_batch(
-        &self,
-        items: &[(String, String, u32, u32)],
-    ) -> Result<usize> {
+    pub fn insert_texture_batch(&self, items: &[(String, String, u32, u32)]) -> Result<usize> {
         let now = format_utc_now();
         let tx = self.conn.unchecked_transaction()?;
         let mut count = 0usize;
@@ -100,9 +98,7 @@ impl TextureDb {
             let mut ins_tex = tx.prepare_cached(
                 "INSERT OR IGNORE INTO texture (url, cachedurl, imagehash, lasthashcheck) VALUES (?1, ?2, '', ?3)",
             )?;
-            let mut sel_id = tx.prepare_cached(
-                "SELECT id FROM texture WHERE url=?1",
-            )?;
+            let mut sel_id = tx.prepare_cached("SELECT id FROM texture WHERE url=?1")?;
             let mut ins_size = tx.prepare_cached(
                 "INSERT OR REPLACE INTO sizes (idtexture, size, width, height, usecount, lastusetime) VALUES (?1, 1, ?2, ?3, 1, ?4)",
             )?;
@@ -177,12 +173,14 @@ mod tests {
     fn insert_and_query() {
         let f = NamedTempFile::new().unwrap();
         let db = TextureDb::open(f.path()).unwrap();
-        let id = db.insert_texture(
-            "https://image.tmdb.org/t/p/w780/test.jpg",
-            "f/fa000000.jpg",
-            780,
-            1170,
-        ).unwrap();
+        let id = db
+            .insert_texture(
+                "https://image.tmdb.org/t/p/w780/test.jpg",
+                "f/fa000000.jpg",
+                780,
+                1170,
+            )
+            .unwrap();
         assert!(id > 0);
         assert!(db.is_cached("https://image.tmdb.org/t/p/w780/test.jpg"));
         assert!(!db.is_cached("https://image.tmdb.org/t/p/w500/test.jpg"));
@@ -193,8 +191,18 @@ mod tests {
         let f = NamedTempFile::new().unwrap();
         let db = TextureDb::open(f.path()).unwrap();
         let items = vec![
-            ("https://a.com/1.jpg".into(), "a/a0000001.jpg".into(), 100, 200),
-            ("https://a.com/2.jpg".into(), "b/b0000002.jpg".into(), 300, 400),
+            (
+                "https://a.com/1.jpg".into(),
+                "a/a0000001.jpg".into(),
+                100,
+                200,
+            ),
+            (
+                "https://a.com/2.jpg".into(),
+                "b/b0000002.jpg".into(),
+                300,
+                400,
+            ),
         ];
         let count = db.insert_texture_batch(&items).unwrap();
         assert_eq!(count, 2);
@@ -206,11 +214,18 @@ mod tests {
     fn insert_ignore_duplicate() {
         let f = NamedTempFile::new().unwrap();
         let db = TextureDb::open(f.path()).unwrap();
-        db.insert_texture("https://a.com/x.jpg", "a/a0000001.jpg", 100, 200).unwrap();
-        db.insert_texture("https://a.com/x.jpg", "a/a0000001.jpg", 100, 200).unwrap();
-        let count: i64 = db.conn.query_row(
-            "SELECT COUNT(*) FROM texture WHERE url='https://a.com/x.jpg'", [], |r| r.get(0),
-        ).unwrap();
+        db.insert_texture("https://a.com/x.jpg", "a/a0000001.jpg", 100, 200)
+            .unwrap();
+        db.insert_texture("https://a.com/x.jpg", "a/a0000001.jpg", 100, 200)
+            .unwrap();
+        let count: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM texture WHERE url='https://a.com/x.jpg'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
         assert_eq!(count, 1);
     }
 
@@ -219,13 +234,37 @@ mod tests {
         let f = NamedTempFile::new().unwrap();
         let db = TextureDb::open(f.path()).unwrap();
         let cached = "f/fa000000.jpg";
-        db.insert_texture("https://image.tmdb.org/t/p/original/test.jpg", cached, 1920, 1080).unwrap();
-        db.insert_texture("https://image.tmdb.org/t/p/w1280/test.jpg", cached, 1920, 1080).unwrap();
-        db.insert_texture("https://image.tmdb.org/t/p/w780/test.jpg", cached, 1920, 1080).unwrap();
+        db.insert_texture(
+            "https://image.tmdb.org/t/p/original/test.jpg",
+            cached,
+            1920,
+            1080,
+        )
+        .unwrap();
+        db.insert_texture(
+            "https://image.tmdb.org/t/p/w1280/test.jpg",
+            cached,
+            1920,
+            1080,
+        )
+        .unwrap();
+        db.insert_texture(
+            "https://image.tmdb.org/t/p/w780/test.jpg",
+            cached,
+            1920,
+            1080,
+        )
+        .unwrap();
 
-        let mut stmt = db.conn.prepare("SELECT cachedurl FROM texture WHERE cachedurl=?1").unwrap();
-        let rows: Vec<String> = stmt.query_map(params![cached], |r| r.get(0)).unwrap()
-            .filter_map(|r| r.ok()).collect();
+        let mut stmt = db
+            .conn
+            .prepare("SELECT cachedurl FROM texture WHERE cachedurl=?1")
+            .unwrap();
+        let rows: Vec<String> = stmt
+            .query_map(params![cached], |r| r.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
         assert_eq!(rows.len(), 3);
     }
 }

@@ -1,6 +1,6 @@
+use crate::api::types_movie::ImageRef;
 use anyhow::Result;
 use rusqlite::{params, Connection};
-use crate::api::types_movie::ImageRef;
 
 /// art(aspect_ratio INTEGER, quality INTEGER, iso_language TEXT, iso_country TEXT,
 ///     icon TEXT, type TEXT, extension TEXT, rating INTEGER, votes INTEGER, parent_id TEXT,
@@ -12,7 +12,12 @@ use crate::api::types_movie::ImageRef;
 /// - `aspect_ratio` is bucketed 1-5 (poster/square/thumb/landscape/wide), not raw
 /// - `quality` is megapixel rank `(width * height) / 200000`, not raw width
 /// - `rating` is `vote_average * 100` integer, not raw 0-10 float
-pub fn write_image(conn: &Connection, parent_id: &str, art_type: &str, img: &ImageRef) -> Result<()> {
+pub fn write_image(
+    conn: &Connection,
+    parent_id: &str,
+    art_type: &str,
+    img: &ImageRef,
+) -> Result<()> {
     let extension = img.file_path.rsplit('.').next().unwrap_or("jpg");
     let aspect_bucket = aspect_ratio_bucket(img.aspect_ratio);
     let quality = match (img.width, img.height) {
@@ -51,11 +56,17 @@ pub fn write_image(conn: &Connection, parent_id: &str, art_type: &str, img: &Ima
 /// 1=poster, 2=square, 3=thumb, 4=landscape, 5=wide.
 fn aspect_ratio_bucket(ar: Option<f64>) -> Option<i64> {
     let r = ar?;
-    Some(if r < 1.0 { 1 }
-        else if (r - 1.0).abs() < f64::EPSILON { 2 }
-        else if r < 1.7 { 3 }
-        else if r <= 1.8 { 4 }
-        else { 5 })
+    Some(if r < 1.0 {
+        1
+    } else if (r - 1.0).abs() < f64::EPSILON {
+        2
+    } else if r < 1.7 {
+        3
+    } else if r <= 1.8 {
+        4
+    } else {
+        5
+    })
 }
 
 #[cfg(test)]
@@ -65,10 +76,10 @@ mod tests {
     #[test]
     fn aspect_ratio_buckets_match_tmdbhelper() {
         assert_eq!(aspect_ratio_bucket(None), None);
-        assert_eq!(aspect_ratio_bucket(Some(0.667)), Some(1));   // poster
-        assert_eq!(aspect_ratio_bucket(Some(1.0)), Some(2));     // square
-        assert_eq!(aspect_ratio_bucket(Some(1.5)), Some(3));     // thumb
-        assert_eq!(aspect_ratio_bucket(Some(1.778)), Some(4));   // 16:9 landscape
-        assert_eq!(aspect_ratio_bucket(Some(2.39)), Some(5));    // anamorphic wide
+        assert_eq!(aspect_ratio_bucket(Some(0.667)), Some(1)); // poster
+        assert_eq!(aspect_ratio_bucket(Some(1.0)), Some(2)); // square
+        assert_eq!(aspect_ratio_bucket(Some(1.5)), Some(3)); // thumb
+        assert_eq!(aspect_ratio_bucket(Some(1.778)), Some(4)); // 16:9 landscape
+        assert_eq!(aspect_ratio_bucket(Some(2.39)), Some(5)); // anamorphic wide
     }
 }

@@ -18,16 +18,18 @@
 ///     (TMDB updates credits between snapshot and live fetch) — threshold: allow ≤10 extra
 mod common;
 
-use warmup_rs::api::TmdbClient;
-use warmup_rs::cache::{movie, open_writer};
 use rusqlite::Connection;
 use std::collections::HashSet;
+use warmup_rs::api::TmdbClient;
+use warmup_rs::cache::{movie, open_writer};
 
 const TARGET_TMDB_ID: i64 = 687163;
 const FIXTURE_PATH: &str = "tests/fixtures/tmdbhelper-warmed-movie-687163.sql";
 
 fn row_set(conn: &Connection, sql: &str) -> HashSet<String> {
-    let mut stmt = conn.prepare(sql).unwrap_or_else(|e| panic!("prepare '{}': {}", sql, e));
+    let mut stmt = conn
+        .prepare(sql)
+        .unwrap_or_else(|e| panic!("prepare '{}': {}", sql, e));
     let names: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
     let rows: Vec<String> = stmt
         .query_map([], |row| {
@@ -48,7 +50,10 @@ fn row_set(conn: &Connection, sql: &str) -> HashSet<String> {
 async fn rust_writes_match_tmdbhelper_for_movie() {
     let key = match option_env!("TMDB_API_KEY") {
         Some(k) => k,
-        None => { eprintln!("TMDB_API_KEY not set, skipping"); return; }
+        None => {
+            eprintln!("TMDB_API_KEY not set, skipping");
+            return;
+        }
     };
 
     let (_conn, scratch_path) = common::scratch_db();
@@ -86,7 +91,13 @@ async fn rust_writes_match_tmdbhelper_for_movie() {
         );
         let rust_rows = row_set(&writer, &sql);
         let tmdb_rows = row_set(&snap, &sql);
-        check_diff("movie (excl. rating/popularity/votes)", &rust_rows, &tmdb_rows, 0, &mut diffs);
+        check_diff(
+            "movie (excl. rating/popularity/votes)",
+            &rust_rows,
+            &tmdb_rows,
+            0,
+            &mut diffs,
+        );
     }
 
     {
@@ -97,7 +108,13 @@ async fn rust_writes_match_tmdbhelper_for_movie() {
         );
         let rust_rows = row_set(&writer, &sql);
         let tmdb_rows = row_set(&snap, &sql);
-        check_diff("baseitem (excl. expiry, language)", &rust_rows, &tmdb_rows, 0, &mut diffs);
+        check_diff(
+            "baseitem (excl. expiry, language)",
+            &rust_rows,
+            &tmdb_rows,
+            0,
+            &mut diffs,
+        );
     }
 
     {
@@ -138,7 +155,13 @@ async fn rust_writes_match_tmdbhelper_for_movie() {
         );
         let rust_rows = row_set(&writer, &sql);
         let tmdb_rows = row_set(&snap, &sql);
-        check_diff("art (excl. rating/votes)", &rust_rows, &tmdb_rows, 5, &mut diffs);
+        check_diff(
+            "art (excl. rating/votes)",
+            &rust_rows,
+            &tmdb_rows,
+            5,
+            &mut diffs,
+        );
     }
 
     {
@@ -173,7 +196,9 @@ async fn rust_writes_match_tmdbhelper_for_movie() {
         let only_in_rust: Vec<&String> = rust_rows.difference(&tmdb_rows).collect();
         let only_in_tmdb: Vec<&String> = tmdb_rows.difference(&rust_rows).collect();
         assert!(
-            only_in_rust.iter().all(|r| r.contains("key=Text(\"tmdb\")")),
+            only_in_rust
+                .iter()
+                .all(|r| r.contains("key=Text(\"tmdb\")")),
             "unique_id only_in_rust must be the 'tmdb' key only, got: {:?}",
             only_in_rust
         );
@@ -231,7 +256,14 @@ fn check_diff(
     max_extra_either_side: usize,
     diffs: &mut Vec<String>,
 ) {
-    check_diff_asymmetric(table, rust, tmdb, max_extra_either_side, max_extra_either_side, diffs);
+    check_diff_asymmetric(
+        table,
+        rust,
+        tmdb,
+        max_extra_either_side,
+        max_extra_either_side,
+        diffs,
+    );
 }
 
 fn check_diff_asymmetric(
@@ -263,16 +295,28 @@ fn check_diff_asymmetric(
             only_in_rust.len(),
             max_extra_in_rust,
             show_rust,
-            if only_in_rust.len() > 20 { format!(" ... (+{})", only_in_rust.len() - 20) } else { String::new() },
+            if only_in_rust.len() > 20 {
+                format!(" ... (+{})", only_in_rust.len() - 20)
+            } else {
+                String::new()
+            },
             only_in_tmdb.len(),
             max_extra_in_tmdb,
             show_tmdb,
-            if only_in_tmdb.len() > 20 { format!(" ... (+{})", only_in_tmdb.len() - 20) } else { String::new() },
+            if only_in_tmdb.len() > 20 {
+                format!(" ... (+{})", only_in_tmdb.len() - 20)
+            } else {
+                String::new()
+            },
         ));
     } else {
         println!(
             "  OK {}: rust={} tmdb={} | only_in_rust={} only_in_tmdb={}",
-            table, rust.len(), tmdb.len(), only_in_rust.len(), only_in_tmdb.len()
+            table,
+            rust.len(),
+            tmdb.len(),
+            only_in_rust.len(),
+            only_in_tmdb.len()
         );
     }
 }

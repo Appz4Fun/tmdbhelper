@@ -1,5 +1,8 @@
+use crate::api::types_movie::{
+    Company, CountryRef, Credits, ExternalIds, Genre, Images, KeywordList, RelatedList,
+    SpokenLanguage, TranslationList, VideoList, WatchProviderRoot,
+};
 use serde::Deserialize;
-use crate::api::types_movie::{Images, VideoList, Credits, ExternalIds, TranslationList, KeywordList, RelatedList, WatchProviderRoot, Genre, Company, CountryRef, SpokenLanguage};
 
 #[derive(Debug, Deserialize)]
 pub struct TvResponse {
@@ -21,12 +24,18 @@ pub struct TvResponse {
     pub episode_run_time: Option<Vec<i64>>,
     pub last_episode_to_air: Option<EpisodeStub>,
     pub next_episode_to_air: Option<EpisodeStub>,
-    #[serde(default)] pub seasons: Vec<SeasonStub>,
-    #[serde(default)] pub genres: Vec<Genre>,
-    #[serde(default)] pub production_companies: Vec<Company>,
-    #[serde(default)] pub production_countries: Vec<CountryRef>,
-    #[serde(default)] pub spoken_languages: Vec<SpokenLanguage>,
-    #[serde(default)] pub networks: Vec<Network>,
+    #[serde(default)]
+    pub seasons: Vec<SeasonStub>,
+    #[serde(default)]
+    pub genres: Vec<Genre>,
+    #[serde(default)]
+    pub production_companies: Vec<Company>,
+    #[serde(default)]
+    pub production_countries: Vec<CountryRef>,
+    #[serde(default)]
+    pub spoken_languages: Vec<SpokenLanguage>,
+    #[serde(default)]
+    pub networks: Vec<Network>,
     pub images: Option<Images>,
     pub videos: Option<VideoList>,
     pub credits: Option<Credits>,
@@ -80,7 +89,8 @@ pub struct SeasonResponse {
     pub overview: Option<String>,
     pub air_date: Option<String>,
     pub poster_path: Option<String>,
-    #[serde(default)] pub episodes: Vec<EpisodeStub>,
+    #[serde(default)]
+    pub episodes: Vec<EpisodeStub>,
     pub images: Option<Images>,
     pub credits: Option<Credits>,
 }

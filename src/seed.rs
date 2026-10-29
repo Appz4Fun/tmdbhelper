@@ -17,12 +17,36 @@ struct Endpoint {
 }
 
 const ENDPOINTS: &[Endpoint] = &[
-    Endpoint { path: "trending/all/week", pages: 5, default_type: None },
-    Endpoint { path: "movie/popular", pages: 5, default_type: Some(TmdbType::Movie) },
-    Endpoint { path: "movie/now_playing", pages: 3, default_type: Some(TmdbType::Movie) },
-    Endpoint { path: "movie/upcoming", pages: 3, default_type: Some(TmdbType::Movie) },
-    Endpoint { path: "tv/popular", pages: 5, default_type: Some(TmdbType::Tv) },
-    Endpoint { path: "person/popular", pages: 3, default_type: Some(TmdbType::Person) },
+    Endpoint {
+        path: "trending/all/week",
+        pages: 5,
+        default_type: None,
+    },
+    Endpoint {
+        path: "movie/popular",
+        pages: 5,
+        default_type: Some(TmdbType::Movie),
+    },
+    Endpoint {
+        path: "movie/now_playing",
+        pages: 3,
+        default_type: Some(TmdbType::Movie),
+    },
+    Endpoint {
+        path: "movie/upcoming",
+        pages: 3,
+        default_type: Some(TmdbType::Movie),
+    },
+    Endpoint {
+        path: "tv/popular",
+        pages: 5,
+        default_type: Some(TmdbType::Tv),
+    },
+    Endpoint {
+        path: "person/popular",
+        pages: 3,
+        default_type: Some(TmdbType::Person),
+    },
 ];
 
 fn parse_media_type(s: &str) -> Option<TmdbType> {
@@ -48,9 +72,9 @@ pub async fn fetch_seeds(client: &TmdbClient) -> Result<Vec<SeedItem>> {
                 }
             };
             for li in &resp.results {
-                let tmdb_type = ep.default_type.or_else(|| {
-                    li.media_type.as_deref().and_then(parse_media_type)
-                });
+                let tmdb_type = ep
+                    .default_type
+                    .or_else(|| li.media_type.as_deref().and_then(parse_media_type));
                 let Some(tt) = tmdb_type else { continue };
                 if seen.insert((li.id, tt)) {
                     items.push(SeedItem {
@@ -66,6 +90,9 @@ pub async fn fetch_seeds(client: &TmdbClient) -> Result<Vec<SeedItem>> {
         }
     }
 
-    info!("seeder fetched {} unique items from TMDB lists", items.len());
+    info!(
+        "seeder fetched {} unique items from TMDB lists",
+        items.len()
+    );
     Ok(items)
 }

@@ -181,7 +181,10 @@ pub async fn run(
                     error!("texture final batch insert failed: {:?}", e);
                 }
             }
-            info!("image writer exiting, total written={} registered={}", written, registered);
+            info!(
+                "image writer exiting, total written={} registered={}",
+                written, registered
+            );
             Ok(())
         })
     };
@@ -207,7 +210,10 @@ pub async fn run(
         })
         .await??;
 
-        info!("image cycle: {} art rows from ItemDetails.db", art_rows.len());
+        info!(
+            "image cycle: {} art rows from ItemDetails.db",
+            art_rows.len()
+        );
         if art_rows.is_empty() {
             info!("no art rows, sleeping 5 minutes");
             tokio::time::sleep(Duration::from_secs(300)).await;
@@ -232,18 +238,25 @@ pub async fn run(
                 let db = texture_db::TextureDb::open(&p)?;
                 db.load_all_cached_urls()
             }
-        }).await??;
+        })
+        .await??;
         info!("image skip cache: {} cached URLs", cached_urls.len());
 
         let existing_files = tokio::task::spawn_blocking({
             let dir = thumbnails_dir.clone();
             move || -> HashSet<String> {
                 let mut set = HashSet::new();
-                let Ok(entries) = std::fs::read_dir(&dir) else { return set };
+                let Ok(entries) = std::fs::read_dir(&dir) else {
+                    return set;
+                };
                 for subdir in entries.filter_map(|e| e.ok()) {
-                    if !subdir.file_type().map_or(false, |t| t.is_dir()) { continue; }
+                    if !subdir.file_type().map_or(false, |t| t.is_dir()) {
+                        continue;
+                    }
                     let prefix = subdir.file_name().to_string_lossy().to_string();
-                    let Ok(files) = std::fs::read_dir(subdir.path()) else { continue };
+                    let Ok(files) = std::fs::read_dir(subdir.path()) else {
+                        continue;
+                    };
                     for file in files.filter_map(|e| e.ok()) {
                         let name = file.file_name().to_string_lossy().to_string();
                         set.insert(format!("{}/{}", prefix, name));
@@ -251,7 +264,8 @@ pub async fn run(
                 }
                 set
             }
-        }).await?;
+        })
+        .await?;
         info!("image skip cache: {} files on disk", existing_files.len());
 
         let mut dispatched = 0u64;
@@ -292,7 +306,13 @@ pub async fn run(
                         Ok(r) => r,
                         Err(e) if e.is_timeout() || e.is_connect() || e.is_request() => {
                             let backoff = Duration::from_millis(500 * (1 << attempt));
-                            warn!("image transport error {}, retry {} in {:?}: {}", url, attempt + 1, backoff, e);
+                            warn!(
+                                "image transport error {}, retry {} in {:?}: {}",
+                                url,
+                                attempt + 1,
+                                backoff,
+                                e
+                            );
                             tokio::time::sleep(backoff).await;
                             continue;
                         }
@@ -320,12 +340,20 @@ pub async fn run(
                     }
                     if status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error() {
                         let base_backoff = Duration::from_millis(500 * (1 << attempt));
-                        let retry_after = resp.headers().get("retry-after")
+                        let retry_after = resp
+                            .headers()
+                            .get("retry-after")
                             .and_then(|v| v.to_str().ok())
                             .and_then(|s| s.parse::<u64>().ok())
                             .map(Duration::from_secs);
                         let backoff = retry_after.map_or(base_backoff, |ra| ra.max(base_backoff));
-                        warn!("image {} for {}, retry {} in {:?}", status, url, attempt + 1, backoff);
+                        warn!(
+                            "image {} for {}, retry {} in {:?}",
+                            status,
+                            url,
+                            attempt + 1,
+                            backoff
+                        );
                         tokio::time::sleep(backoff).await;
                         continue;
                     }
@@ -337,7 +365,10 @@ pub async fn run(
 
             dispatched += 1;
             if dispatched.is_multiple_of(10000) {
-                info!("image dispatch progress: dispatched={} skipped={}", dispatched, skipped);
+                info!(
+                    "image dispatch progress: dispatched={} skipped={}",
+                    dispatched, skipped
+                );
             }
         }
 

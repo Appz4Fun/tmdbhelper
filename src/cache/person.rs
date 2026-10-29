@@ -1,9 +1,9 @@
-use anyhow::Result;
-use rusqlite::{params, Connection};
 use crate::api::types_movie::ImageRef;
 use crate::api::types_person::PersonResponse;
 use crate::cache::{art, default_expiry, DATALEVEL_FULL};
 use crate::id;
+use anyhow::Result;
+use rusqlite::{params, Connection};
 
 pub fn write_person(conn: &Connection, p: &PersonResponse) -> Result<()> {
     let item_id = id::build_item_id(id::TmdbType::Person, p.id);

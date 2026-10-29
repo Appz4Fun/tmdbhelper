@@ -4,7 +4,10 @@ use warmup_rs::api::TmdbClient;
 async fn fight_club_fetch_full() {
     let key = match option_env!("TMDB_API_KEY") {
         Some(k) => k,
-        None => { eprintln!("TMDB_API_KEY not set, skipping"); return; }
+        None => {
+            eprintln!("TMDB_API_KEY not set, skipping");
+            return;
+        }
     };
     let client = TmdbClient::new(key.into()).unwrap();
     let m = client.get_movie(550).await.expect("fight club fetch");
@@ -13,11 +16,28 @@ async fn fight_club_fetch_full() {
     assert!(!m.genres.is_empty(), "expected genres");
     let credits = m.credits.expect("credits present");
     assert!(credits.cast.len() >= 5, "expected at least 5 cast");
-    assert!(credits.crew.iter().any(|c| c.job.as_deref() == Some("Director")), "expected Director in crew");
+    assert!(
+        credits
+            .crew
+            .iter()
+            .any(|c| c.job.as_deref() == Some("Director")),
+        "expected Director in crew"
+    );
     let images = m.images.expect("images present");
     assert!(!images.backdrops.is_empty(), "expected backdrops");
-    assert_eq!(m.imdb_id.as_deref(), Some("tt0137523"), "imdb_id field deserialized");
+    assert_eq!(
+        m.imdb_id.as_deref(),
+        Some("tt0137523"),
+        "imdb_id field deserialized"
+    );
     let ext = m.external_ids.expect("external_ids present");
-    assert_eq!(ext.imdb_id.as_deref(), Some("tt0137523"), "external_ids.imdb_id deserialized");
-    assert!(m.belongs_to_collection.is_none(), "Fight Club is not in a collection");
+    assert_eq!(
+        ext.imdb_id.as_deref(),
+        Some("tt0137523"),
+        "external_ids.imdb_id deserialized"
+    );
+    assert!(
+        m.belongs_to_collection.is_none(),
+        "Fight Club is not in a collection"
+    );
 }
