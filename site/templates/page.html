@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block main %}
+<article class="content">
+  <p class="path"><a href="{{ root }}index.html">{{ site.crate }}</a>::<a href="{{ root }}index.html">docs</a>::<b>{{ page.slug | replace("-", "_") }}</b></p>
+  <header class="page-head">
+    {% if page.meta.get("eyebrow") %}<p class="eyebrow">{{ page.meta.eyebrow }}</p>{% endif %}
+    <h1>{{ page.title }}</h1>
+    {% if page.meta.get("lede") %}<p class="lede">{{ page.meta.lede }}</p>{% endif %}
+  </header>
+  <div class="prose">
+{{ page.body | safe }}
+  </div>
+</article>
+{% endblock %}

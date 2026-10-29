@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block main %}
+<article class="content content-wide">
+  <section class="hero">
+    <div>
+      <p class="eyebrow">{{ page.meta.eyebrow }}</p>
+      <h1>{{ page.meta.headline }}<br><span>{{ page.meta.headline_accent }}</span></h1>
+      <p class="lede">{{ page.meta.lede }}</p>
+      <div class="actions">
+        <a class="button primary" href="install.html">Install and build</a>
+        <a class="button" href="quick-start.html">Quick start</a>
+      </div>
+      <ul class="facts">
+        {% for fact in page.meta.facts %}<li>{{ fact }}</li>{% endfor %}
+      </ul>
+    </div>
+    <figure class="readout" aria-label="Illustration: a metadata crawl and an image crawl filling the caches">
+      <figcaption>illustration · one run on a desktop</figcaption>
+<pre><span class="v">  Seeded</span> 1,840 trending titles
+<span class="v"> Crawled</span> movie 603  <span class="m">credits</span>
+<span class="v"> Crawled</span> person 6384
+<span class="v">   Wrote</span> 200 items <span class="m">1 commit</span>
+<span class="v">  Hashed</span> poster    <span class="m">CRC-32</span>
+<span class="v">   Saved</span> images/d/d4c8e2f1.jpg
+<span class="w"> Skipped</span> 12 cached images
+<span class="r">    Done</span> ItemDetails.db</pre>
+    </figure>
+  </section>
+  <div class="prose">
+{{ page.body | safe }}
+  </div>
+</article>
+{% endblock %}
