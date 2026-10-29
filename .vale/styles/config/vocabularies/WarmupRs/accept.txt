@@ -30,3 +30,8 @@ TRIM
 MCP
 Claude Code
 Claude
+SSDs
+Docker
+codegen
+toolchain
+passthrough
