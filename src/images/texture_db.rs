@@ -3,6 +3,16 @@ use rusqlite::{params, Connection, OpenFlags};
 use std::collections::HashSet;
 use std::path::Path;
 
+// Kodi's `idxTexture` and `idxSize` indexes aren't unique, so `INSERT OR IGNORE`
+// and `INSERT OR REPLACE` never dedupe. These statements check for an existing row.
+const INSERT_TEXTURE: &str = "INSERT INTO texture (url, cachedurl, imagehash, lasthashcheck)
+     SELECT ?1, ?2, '', ?3 WHERE NOT EXISTS (SELECT 1 FROM texture WHERE url=?1)";
+const UPDATE_SIZE: &str =
+    "UPDATE sizes SET width=?2, height=?3, lastusetime=?4 WHERE idtexture=?1 AND size=1";
+const INSERT_SIZE: &str =
+    "INSERT INTO sizes (idtexture, size, width, height, usecount, lastusetime)
+     SELECT ?1, 1, ?2, ?3, 1, ?4 WHERE NOT EXISTS (SELECT 1 FROM sizes WHERE idtexture=?1 AND size=1)";
+
 pub struct TextureDb {
     conn: Connection,
 }
@@ -71,9 +81,9 @@ impl TextureDb {
         height: u32,
     ) -> Result<i64> {
         let now = format_utc_now();
-        self.conn.prepare_cached(
-            "INSERT OR IGNORE INTO texture (url, cachedurl, imagehash, lasthashcheck) VALUES (?1, ?2, '', ?3)",
-        )?.execute(params![url, cached_url, &now])?;
+        self.conn
+            .prepare_cached(INSERT_TEXTURE)?
+            .execute(params![url, cached_url, &now])?;
 
         let id: i64 = self
             .conn
@@ -81,9 +91,12 @@ impl TextureDb {
             .query_row(params![url], |r| r.get(0))?;
 
         if width > 0 || height > 0 {
-            self.conn.prepare_cached(
-                "INSERT OR REPLACE INTO sizes (idtexture, size, width, height, usecount, lastusetime) VALUES (?1, 1, ?2, ?3, 1, ?4)",
-            )?.execute(params![id, width, height, &now])?;
+            self.conn
+                .prepare_cached(UPDATE_SIZE)?
+                .execute(params![id, width, height, &now])?;
+            self.conn
+                .prepare_cached(INSERT_SIZE)?
+                .execute(params![id, width, height, &now])?;
         }
 
         Ok(id)
@@ -95,13 +108,10 @@ impl TextureDb {
         let mut count = 0usize;
 
         {
-            let mut ins_tex = tx.prepare_cached(
-                "INSERT OR IGNORE INTO texture (url, cachedurl, imagehash, lasthashcheck) VALUES (?1, ?2, '', ?3)",
-            )?;
+            let mut ins_tex = tx.prepare_cached(INSERT_TEXTURE)?;
             let mut sel_id = tx.prepare_cached("SELECT id FROM texture WHERE url=?1")?;
-            let mut ins_size = tx.prepare_cached(
-                "INSERT OR REPLACE INTO sizes (idtexture, size, width, height, usecount, lastusetime) VALUES (?1, 1, ?2, ?3, 1, ?4)",
-            )?;
+            let mut upd_size = tx.prepare_cached(UPDATE_SIZE)?;
+            let mut ins_size = tx.prepare_cached(INSERT_SIZE)?;
 
             for (url, cached_url, w, h) in items {
                 if ins_tex.execute(params![url, cached_url, &now])? > 0 {
@@ -109,6 +119,7 @@ impl TextureDb {
                 }
                 if *w > 0 || *h > 0 {
                     let id: i64 = sel_id.query_row(params![url], |r| r.get(0))?;
+                    upd_size.execute(params![id, w, h, &now])?;
                     ins_size.execute(params![id, w, h, &now])?;
                 }
             }
@@ -227,6 +238,11 @@ mod tests {
             )
             .unwrap();
         assert_eq!(count, 1);
+        let sizes: i64 = db
+            .conn
+            .query_row("SELECT COUNT(*) FROM sizes", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(sizes, 1);
     }
 
     #[test]
