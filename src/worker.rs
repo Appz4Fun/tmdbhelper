@@ -212,16 +212,8 @@ pub async fn run(
                     let rate = written as f64 / elapsed;
                     let qsize = state.queue_size().unwrap_or(0);
                     let vcount = state.visited_count().unwrap_or(0);
-                    let avg_write = if written > 0 {
-                        total_write_ms / written
-                    } else {
-                        0
-                    };
-                    let avg_state = if written > 0 {
-                        total_state_ms / written
-                    } else {
-                        0
-                    };
+                    let avg_write = total_write_ms.checked_div(written).unwrap_or(0);
+                    let avg_state = total_state_ms.checked_div(written).unwrap_or(0);
                     info!("written={} visited={} queue={} rate={:.1}/s batch={} avg_write={}ms avg_state={}ms",
                           written, vcount, qsize, rate, batch.len(), avg_write, avg_state);
                 }

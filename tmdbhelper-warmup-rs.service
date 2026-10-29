@@ -9,6 +9,8 @@ Type=simple
 ExecStartPre=-/usr/bin/sqlite3 /storage/.kodi/userdata/addon_data/plugin.video.themoviedb.helper/database_07/ItemDetails.db "PRAGMA wal_checkpoint(PASSIVE);"
 ExecStart=/storage/tmdb/warmup-rs
 Environment=RUST_LOG=warmup_rs=info,warn
+# Metadata mode needs a TMDB API v3 key.
+#Environment=WARMUP_TMDB_API_KEY=<your key>
 Restart=on-failure
 RestartSec=60
 Nice=10

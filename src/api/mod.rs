@@ -40,7 +40,7 @@ impl TmdbClient {
             .timeout(Duration::from_secs(30))
             .pool_max_idle_per_host(50)
             .build()
-            .context("build reqwest client")?;
+            .context("build HTTP client")?;
         Ok(Self { client, api_key })
     }
 
@@ -85,7 +85,7 @@ impl TmdbClient {
                 Err(e) if e.is_timeout() || e.is_connect() || e.is_request() => {
                     let backoff = Duration::from_millis(500 * (1 << attempt));
                     warn!(
-                        "tmdb list transport error for {}, retry {} in {:?}: {}",
+                        "TMDB list transport error for {}, retry {} in {:?}: {}",
                         path,
                         attempt + 1,
                         backoff,
@@ -113,7 +113,7 @@ impl TmdbClient {
                     .map(Duration::from_secs);
                 let backoff = retry_after.map_or(base_backoff, |ra| ra.max(base_backoff));
                 warn!(
-                    "tmdb {} for list {}, retry {} in {:?}",
+                    "TMDB {} for list {}, retry {} in {:?}",
                     status,
                     path,
                     attempt + 1,
@@ -122,9 +122,9 @@ impl TmdbClient {
                 tokio::time::sleep(backoff).await;
                 continue;
             }
-            return Err(anyhow!("tmdb {} for list {}", status, path));
+            return Err(anyhow!("TMDB {} for list {}", status, path));
         }
-        Err(anyhow!("tmdb list retries exhausted for {}", path))
+        Err(anyhow!("TMDB list retries exhausted for {}", path))
     }
 
     async fn get_json<T: serde::de::DeserializeOwned>(
@@ -144,7 +144,7 @@ impl TmdbClient {
                 Err(e) if e.is_timeout() || e.is_connect() || e.is_request() => {
                     let backoff = Duration::from_millis(500 * (1 << attempt));
                     warn!(
-                        "tmdb transport error for {}, retry {} in {:?}: {}",
+                        "TMDB transport error for {}, retry {} in {:?}: {}",
                         base_url,
                         attempt + 1,
                         backoff,
@@ -163,7 +163,7 @@ impl TmdbClient {
                     .with_context(|| format!("decode JSON from {}", base_url));
             }
             if status == StatusCode::NOT_FOUND {
-                return Err(anyhow!("tmdb 404 for {}", base_url));
+                return Err(anyhow!("TMDB 404 for {}", base_url));
             }
             if status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error() {
                 let base_backoff = Duration::from_millis(500 * (1 << attempt));
@@ -175,7 +175,7 @@ impl TmdbClient {
                     .map(Duration::from_secs);
                 let backoff = retry_after.map_or(base_backoff, |ra| ra.max(base_backoff));
                 warn!(
-                    "tmdb {} for {}, retry {} in {:?}",
+                    "TMDB {} for {}, retry {} in {:?}",
                     status,
                     base_url,
                     attempt + 1,
@@ -184,8 +184,8 @@ impl TmdbClient {
                 tokio::time::sleep(backoff).await;
                 continue;
             }
-            return Err(anyhow!("tmdb {} for {}", status, base_url));
+            return Err(anyhow!("TMDB {} for {}", status, base_url));
         }
-        Err(anyhow!("tmdb retries exhausted for {}", base_url))
+        Err(anyhow!("TMDB retries exhausted for {}", base_url))
     }
 }

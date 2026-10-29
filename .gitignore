@@ -3,3 +3,6 @@
 
 # Backtraces
 *.rs.bk
+
+# Default output folder for desktop runs
+/output

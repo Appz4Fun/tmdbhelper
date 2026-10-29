@@ -96,7 +96,7 @@ pub async fn run(
         .timeout(std::time::Duration::from_secs(30))
         .pool_max_idle_per_host(50)
         .build()
-        .context("build image http client")?;
+        .context("build image HTTP client")?;
 
     #[allow(unused_variables)]
     let writer_handle = {
@@ -250,7 +250,7 @@ pub async fn run(
                     return set;
                 };
                 for subdir in entries.filter_map(|e| e.ok()) {
-                    if !subdir.file_type().map_or(false, |t| t.is_dir()) {
+                    if !subdir.file_type().is_ok_and(|t| t.is_dir()) {
                         continue;
                     }
                     let prefix = subdir.file_name().to_string_lossy().to_string();
