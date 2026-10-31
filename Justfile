@@ -63,6 +63,10 @@ build-release-win:
     {{cross}} build --release --target {{target_win}}
     @echo "Built target/{{target_win}}/release/{{bin}}.exe"
 
+# Builds an Entware opkg package and feed for arm64 in target/opkg. Needs cross and Docker.
+build-opkg: build-release-arm
+    python3 scripts/build-ipk.py --binary target/{{target_arm}}/release/{{bin}}
+
 # Installs the release binary for this computer into ~/.cargo/bin.
 install:
     cargo install --locked --path .

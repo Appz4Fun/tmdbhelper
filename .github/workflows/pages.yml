@@ -1,6 +1,7 @@
-# Checks the code and the prose, builds the documentation site from site/,
-# and deploys it to GitHub Pages. Pull requests and pushes to other branches
-# get the checks and the build. Only a push to the default branch deploys.
+# Checks the code and the prose, builds the documentation site from site/ and
+# the Entware opkg feed, and deploys both to GitHub Pages. Pull requests get the
+# checks and the builds. Only a push to the default branch deploys.
+# The job runs on arm64, so the musl build for the opkg package is a native one.
 name: docs
 
 on:
@@ -18,7 +19,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -39,8 +40,8 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/vale"
           curl --fail --location --silent --show-error --output "$RUNNER_TEMP/vale.tar.gz" \
-            https://github.com/vale-cli/vale/releases/download/v3.24.0/vale_3.24.0_Linux_64-bit.tar.gz
-          echo "867534ddb678abca7f214bc4706ead0922bd5252ffe8035fc227013f66c8b214  $RUNNER_TEMP/vale.tar.gz" | sha256sum --check
+            https://github.com/vale-cli/vale/releases/download/v3.24.0/vale_3.24.0_Linux_arm64.tar.gz
+          echo "104cbd349279e50c4cb40adb70adf345d93cc4a3a0191f9e68bdccb97086b582  $RUNNER_TEMP/vale.tar.gz" | sha256sum --check
           tar -xzf "$RUNNER_TEMP/vale.tar.gz" -C "$RUNNER_TEMP/vale" vale
           echo "$RUNNER_TEMP/vale" >> "$GITHUB_PATH"
 
@@ -74,6 +75,16 @@ jobs:
 
       - name: Check links and pages
         run: python site/check.py "$RUNNER_TEMP/site"
+
+      - name: Build the opkg feed
+        env:
+          CC_aarch64_unknown_linux_musl: musl-gcc
+        run: |
+          sudo apt-get install --yes --no-install-recommends musl-tools
+          rustup target add aarch64-unknown-linux-musl
+          cargo build --release --locked --target aarch64-unknown-linux-musl
+          target/aarch64-unknown-linux-musl/release/warmup-rs --mode=smoke
+          python scripts/build-ipk.py --binary target/aarch64-unknown-linux-musl/release/warmup-rs --out "$RUNNER_TEMP/site/opkg"
 
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'

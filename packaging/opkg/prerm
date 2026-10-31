@@ -1,0 +1,17 @@
+#!/bin/sh
+# Stops and removes the services when the package is removed. opkg also runs this
+# script on an upgrade, with PKG_UPGRADE=1, and an upgrade must keep them enabled.
+[ "$PKG_UPGRADE" = 1 ] && exit 0
+
+TARGET=/storage/.config/system.d
+UNITS="tmdbhelper-warmup-rs.service tmdbhelper-warmup-images.service"
+
+if [ -d "$TARGET" ] && command -v systemctl >/dev/null 2>&1; then
+    # shellcheck disable=SC2086
+    systemctl disable --now $UNITS 2>/dev/null
+    for unit in $UNITS; do
+        rm -f "$TARGET/$unit"
+    done
+    systemctl daemon-reload
+fi
+exit 0

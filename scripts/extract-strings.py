@@ -2,9 +2,10 @@
 """Collect user-facing string literals from the Rust sources for Vale.
 
 Writes one Markdown paragraph per log, error, or help string found in
-`src/`. Format placeholders such as `{}` become inline code, so Vale checks
-the prose around them. Text that comes back from TMDB isn't in the source,
-so it never reaches this file.
+`src/`, plus each comment, message, and unit description in `packaging/`.
+Format placeholders such as `{}` become inline code, so Vale checks the prose
+around them. Text that comes back from TMDB isn't in the source, so it never
+reaches this file.
 """
 import pathlib
 import re
@@ -13,6 +14,7 @@ import sys
 MACROS = r"(?:info|warn|error|debug|trace|bail|anyhow|format|context)"
 CALL = re.compile(MACROS + r"!?\(\s*\"((?:[^\"\\]|\\.)*)\"", re.S)
 CONTEXT = re.compile(r"\.(?:context|with_context)\(\s*(?:\|\|\s*format!\()?\s*\"((?:[^\"\\]|\\.)*)\"", re.S)
+PACKAGING = re.compile(r"^\s*(?:#\s+(.+)|echo \"(.+)\"|Description=(.+))$")
 PLACEHOLDER = re.compile(r"\{[^{}]*\}")
 IDENT = re.compile(r"(?<![\w`])(--[\w-]+|[A-Z][A-Z0-9]*_[A-Z0-9_]+)\b")
 KEYVALUE = re.compile(r"\b\w+=\S*?(?=[\s,]|$)")
@@ -26,8 +28,24 @@ def clean(s):
     return " ".join(s.split())
 
 
-def main(src, out):
+def packaging_strings(root):
+    """Comments, `echo` messages, and unit descriptions in the opkg files."""
     found = []
+    for path in sorted(pathlib.Path(root).rglob("*")):
+        if not path.is_file():
+            continue
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            m = PACKAGING.match(line)
+            if not m or "=" in (m.group(1) or "") or "shellcheck" in line:
+                continue
+            text = next(g for g in m.groups() if g)
+            text = re.sub(r"\$\w+|\S*/\S*|\bsystemctl .*|\b[A-Z]+_[A-Z_]+\b|\bwarmup-rs:", lambda x: f"`{x.group(0)}`", text)
+            found.append(f"<!-- {path}:{number} -->\n{text}\n")
+    return found
+
+
+def main(src, out):
+    found = packaging_strings("packaging") if pathlib.Path("packaging").is_dir() else []
     for path in sorted(pathlib.Path(src).rglob("*.rs")):
         text = path.read_text(encoding="utf-8")
         for rx in (CALL, CONTEXT):

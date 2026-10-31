@@ -10,12 +10,7 @@
 - [ ] Decide whether to ship an MSVC build, which needs a Windows runner or
       `cargo-xwin`.
 
-## CoreELEC package
+## Kodi add-on
 
-Today, installing on a Kodi box means copying the binary and the systemd units
-by hand. See [issue 3](https://github.com/Appz4Fun/tmdbhelper/issues/3).
-
-- [ ] Build an opkg package for Entware, because many CoreELEC users already
-      have opkg.
-- [ ] Consider a full Kodi add-on later, which would install from Kodi's own
-      interface.
+- [ ] Consider a full Kodi add-on, which would install from Kodi's own interface,
+      for people who don't use Entware.

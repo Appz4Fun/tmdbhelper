@@ -97,6 +97,7 @@ The [Justfile](Justfile) wraps the usual commands. Run `just` to list them.
 | `just build`, `just build-release`, `just build-debug` | Builds for this computer. |
 | `just build-release-x86`, `just build-release-arm` | Builds static musl binaries for `x86_64` and `aarch64` Linux with [cross](https://github.com/cross-rs/cross). |
 | `just build-release-win` | Builds an `x86_64` Windows binary with cross. Beta, see [TODO.md](TODO.md). |
+| `just build-opkg` | Builds an Entware opkg package and feed for arm64. |
 | `just install` | Installs the release build into `~/.cargo/bin`. |
 | `just build-docker`, `just build-docker-x86`, `just build-docker-arm` | Builds a Docker image for this computer, `linux/amd64`, or `linux/arm64`. |
 | `just build-dockerx` | Builds `linux/amd64` and `linux/arm64` with Buildx and merges the manifest. |
@@ -105,6 +106,12 @@ The [Justfile](Justfile) wraps the usual commands. Run `just` to list them.
 | `just site`, `just site-serve` | Builds the documentation site, or builds and serves it locally. |
 
 ## Deploy to a Kodi box
+
+On CoreELEC with Entware, install the opkg package. Its feed and the setup steps
+are on the
+[Entware package](https://appz4fun.github.io/tmdbhelper/opkg.html) page.
+
+To deploy by hand:
 
 ```bash
 just build-release-arm
