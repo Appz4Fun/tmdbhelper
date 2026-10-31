@@ -9,6 +9,7 @@ Options:
           Possible values:
           - metadata: crawl TMDB and write ItemDetails.db
           - images:   download artwork and register it in Textures13.db
+          - fanart:   fetch fanart.tv art for the movies and shows in ItemDetails.db
           - smoke:    check that the binary runs, then exit without side effects
           
           [env: WARMUP_MODE=]
@@ -18,6 +19,16 @@ Options:
           TMDB API v3 key. Required in metadata mode
           
           [env: WARMUP_TMDB_API_KEY]
+
+      --fanart-api-key <FANART_API_KEY>
+          fanart.tv API key. Required in fanart mode
+          
+          [env: WARMUP_FANART_API_KEY]
+
+      --fanart-client-key <FANART_CLIENT_KEY>
+          fanart.tv personal key, sent alongside a project's API key in fanart mode
+          
+          [env: WARMUP_FANART_CLIENT_KEY]
 
       --concurrency <CONCURRENCY>
           Number of concurrent requests to TMDB

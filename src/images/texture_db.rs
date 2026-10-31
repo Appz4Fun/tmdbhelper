@@ -4,10 +4,11 @@ use rusqlite::{params, Connection, OpenFlags};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+// Kodi leaves `imagehash` and `lasthashcheck` empty for web images, which it never rechecks.
 // Kodi's `idxTexture` and `idxSize` indexes aren't unique, so `INSERT OR IGNORE`
 // and `INSERT OR REPLACE` never dedupe. These statements check for an existing row.
 const INSERT_TEXTURE: &str = "INSERT INTO texture (url, cachedurl, imagehash, lasthashcheck)
-     SELECT ?1, ?2, '', ?3 WHERE NOT EXISTS (SELECT 1 FROM texture WHERE url=?1)";
+     SELECT ?1, ?2, '', '' WHERE NOT EXISTS (SELECT 1 FROM texture WHERE url=?1)";
 const UPDATE_SIZE: &str =
     "UPDATE sizes SET width=?2, height=?3, lastusetime=?4 WHERE idtexture=?1 AND size=1";
 const INSERT_SIZE: &str =
@@ -135,7 +136,7 @@ impl TextureDb {
         let now = format_utc_now();
         self.conn
             .prepare_cached(INSERT_TEXTURE)?
-            .execute(params![url, cached_url, &now])?;
+            .execute(params![url, cached_url])?;
 
         let id: i64 = self
             .conn
@@ -166,7 +167,7 @@ impl TextureDb {
             let mut ins_size = tx.prepare_cached(INSERT_SIZE)?;
 
             for (url, cached_url, w, h) in items {
-                if ins_tex.execute(params![url, cached_url, &now])? > 0 {
+                if ins_tex.execute(params![url, cached_url])? > 0 {
                     count += 1;
                 }
                 if *w > 0 || *h > 0 {

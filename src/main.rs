@@ -26,6 +26,8 @@ enum Mode {
     Metadata,
     /// download artwork and register it in Textures13.db.
     Images,
+    /// fetch fanart.tv art for the movies and shows in ItemDetails.db.
+    Fanart,
     /// check that the binary runs, then exit without side effects.
     Smoke,
 }
@@ -45,6 +47,14 @@ struct Args {
     /// TMDB API v3 key. Required in metadata mode.
     #[arg(long, env = "WARMUP_TMDB_API_KEY", hide_env_values = true)]
     tmdb_api_key: Option<String>,
+
+    /// fanart.tv API key. Required in fanart mode.
+    #[arg(long, env = "WARMUP_FANART_API_KEY", hide_env_values = true)]
+    fanart_api_key: Option<String>,
+
+    /// fanart.tv personal key, sent alongside a project's API key in fanart mode.
+    #[arg(long, env = "WARMUP_FANART_CLIENT_KEY", hide_env_values = true)]
+    fanart_client_key: Option<String>,
 
     /// Number of concurrent requests to TMDB.
     #[arg(long, env = "WARMUP_CONCURRENCY", default_value_t = 20, value_parser = clap::value_parser!(u64).range(1..))]
@@ -101,6 +111,11 @@ async fn main() -> anyhow::Result<()> {
     if args.mode == Mode::Metadata && args.tmdb_api_key.is_none() {
         anyhow::bail!(
             "metadata mode needs a TMDB API key: set --tmdb-api-key or WARMUP_TMDB_API_KEY"
+        );
+    }
+    if args.mode == Mode::Fanart && args.fanart_api_key.is_none() {
+        anyhow::bail!(
+            "fanart mode needs a fanart.tv API key: set --fanart-api-key or WARMUP_FANART_API_KEY"
         );
     }
     let concurrency = args.concurrency as usize;
@@ -169,6 +184,18 @@ async fn main() -> anyhow::Result<()> {
                 concurrency,
                 min_free_bytes,
             )
+            .await?;
+        }
+        Mode::Fanart => {
+            info!("fanart mode: target={}", paths.item_details_db.display());
+            warmup_rs::fanart::run(warmup_rs::fanart::Options {
+                item_details_path: paths.item_details_db,
+                api_key: args.fanart_api_key.unwrap_or_default(),
+                client_key: args.fanart_client_key,
+                language: args.language,
+                concurrency,
+                min_free_bytes,
+            })
             .await?;
         }
         Mode::Smoke => {

@@ -11,6 +11,7 @@ lede = "warmup-rs has two independent modes. Metadata mode fills ItemDetails.db,
 |---|---|
 | `metadata` | The default. Crawls TMDB and writes `ItemDetails.db`. |
 | `images` | Reads every art path from `ItemDetails.db`, downloads each image, and registers it in `Textures13.db`. |
+| `fanart` | Fetches fanart.tv art for the movies and shows in `ItemDetails.db`, and marks them as checked. Needs a fanart.tv API key. |
 | `smoke` | Opens an in-memory SQLite database and builds an HTTP client, then exits. Use it to check that the binary runs on a device. |
 
 Both real modes are restart-safe. Metadata mode resumes from its queue in `state.db`, and images mode skips files already on disk and URLs already in `Textures13.db`. The two modes are separate processes, so you can run them at the same time.
@@ -28,7 +29,7 @@ Both real modes are restart-safe. Metadata mode resumes from its queue in `state
 
 ## Image crawl
 
-1. warmup-rs reads every art path from `ItemDetails.db`, most popular title first. It skips SVG logos, because TMDBHelper only shows PNG logos.
+1. warmup-rs reads every TMDB art path and fanart.tv URL from `ItemDetails.db`, most popular title first. It skips SVG logos, because TMDBHelper only shows PNG logos.
 2. It downloads each image once, at `original` size, the only size TMDB serves unchanged. At startup, it deletes any file an older version downloaded at `w1280`, so the original replaces it.
 3. It names the file the way Kodi does: the CRC-32/MPEG-2 hash of the lowercase URL, stored as `<first hex digit>/<hash>.<extension>`. The hash is a port of Kodi's `xbmc/utils/Crc32.cpp`, and the tests check it against real `Textures13.db` filenames.
 4. It registers several URL sizes for each image, all pointing at the one file. These are the URLs TMDBHelper requests at each `artwork_quality` setting. For example, it registers a poster as `original`, `w780`, `w500`, and `w342`.
@@ -45,4 +46,4 @@ TMDBHelper only reads a cached row when the row is unexpired, has a full data le
 
 `schema/ItemDetails.sql` sets the add-on's schema version. Keep it current: the add-on drops every table in a database with an older non-zero version. warmup-rs refuses to write to a database with a different version, and `scripts/addon-schema.py` rebuilds the schema from a TMDBHelper checkout.
 
-warmup-rs writes no `fanart_tv` rows and no ratings from other services, since those need other API keys. If you turn on the add-on's fanart.tv lookup, it fetches each item again the first time it needs it.
+With the add-on's fanart.tv lookup on, it also ignores a movie or show until `baseitem.fanart_tv` is set, so run `fanart` mode, which fetches that art and sets the flag. warmup-rs writes no ratings from other services, since the add-on fetches those itself when it needs them.

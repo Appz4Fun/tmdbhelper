@@ -9,8 +9,10 @@ lede = "Every flag has an environment variable, which is handy in systemd units.
 
 | Flag | Variable | Default | Description |
 |---|---|---|---|
-| `--mode` | `WARMUP_MODE` | `metadata` | `metadata`, `images`, or `smoke`. |
+| `--mode` | `WARMUP_MODE` | `metadata` | `metadata`, `images`, `fanart`, or `smoke`. |
 | `--tmdb-api-key` | `WARMUP_TMDB_API_KEY` | none | TMDB API v3 key. Required in metadata mode. |
+| `--fanart-api-key` | `WARMUP_FANART_API_KEY` | none | fanart.tv API key. Required in fanart mode. |
+| `--fanart-client-key` | `WARMUP_FANART_CLIENT_KEY` | none | fanart.tv personal key, sent alongside a project's API key in fanart mode. |
 | `--concurrency` | `WARMUP_CONCURRENCY` | `20` | Number of concurrent requests to TMDB. |
 | `--language` | `WARMUP_LANGUAGE` | `en-US` | The add-on's language setting. TMDBHelper ignores rows in any other language. |
 | `--all-ids` | `WARMUP_ALL_IDS` | off | Queues every title, person, and collection from TMDB's daily ID lists in metadata mode. |

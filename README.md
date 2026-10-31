@@ -68,6 +68,7 @@ CoreELEC, LibreELEC, or OpenELEC. On an appliance, TMDBHelper must have created
 |------|--------------|
 | `metadata` | The default. Crawls TMDB and writes `ItemDetails.db`, starting from TMDB's trending and popular lists and following credits, similar titles, recommendations, filmographies, and collections up to two hops away. It also fetches every season and episode of each show. With `--all-ids`, it queues everything in TMDB's daily ID lists. |
 | `images` | Reads every art path from `ItemDetails.db`, downloads each image at `original` size, saves it in the images folder, and registers every URL TMDBHelper can request in `Textures13.db`, so Kodi gets a cache hit at any `artwork_quality` setting. |
+| `fanart` | Fetches fanart.tv art for the movies and shows in `ItemDetails.db`. TMDBHelper needs this when its fanart.tv lookup is on, or it ignores those rows. |
 | `smoke` | Opens an in-memory SQLite database, builds an HTTP client, and exits. Use it to check that the binary runs on a device. |
 
 Both real modes are restart-safe, and you can run them at the same time. See
@@ -83,6 +84,8 @@ text.
 |------|----------|---------|
 | `--mode` | `WARMUP_MODE` | `metadata` |
 | `--tmdb-api-key` | `WARMUP_TMDB_API_KEY` | Required in metadata mode |
+| `--fanart-api-key` | `WARMUP_FANART_API_KEY` | Required in fanart mode |
+| `--fanart-client-key` | `WARMUP_FANART_CLIENT_KEY` | None |
 | `--concurrency` | `WARMUP_CONCURRENCY` | `20` |
 | `--language` | `WARMUP_LANGUAGE` | `en-US` |
 | `--all-ids` | `WARMUP_ALL_IDS` | Off |

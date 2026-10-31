@@ -227,15 +227,19 @@ pub async fn run(
                 // Most popular first, so a disk limit keeps the art people will see.
                 // SVG logos are skipped because TMDBHelper only shows PNG logos.
                 let mut stmt = conn.prepare(
-                    "SELECT a.icon, a.type FROM art a
-                     LEFT JOIN movie m ON m.id = a.parent_id
-                     LEFT JOIN tvshow t ON t.id = a.parent_id
-                     LEFT JOIN person p ON p.id = a.parent_id
-                     LEFT JOIN season s ON s.id = a.parent_id
-                     LEFT JOIN episode e ON e.id = a.parent_id
+                    "SELECT x.icon, x.type FROM (
+                         SELECT icon, type, parent_id FROM art
+                         WHERE icon IS NOT NULL AND extension != 'svg'
+                         UNION ALL
+                         SELECT icon, type, parent_id FROM fanart_tv WHERE icon IS NOT NULL
+                     ) x
+                     LEFT JOIN movie m ON m.id = x.parent_id
+                     LEFT JOIN tvshow t ON t.id = x.parent_id
+                     LEFT JOIN person p ON p.id = x.parent_id
+                     LEFT JOIN season s ON s.id = x.parent_id
+                     LEFT JOIN episode e ON e.id = x.parent_id
                      LEFT JOIN tvshow st ON st.id = COALESCE(s.tvshow_id, e.tvshow_id)
-                     WHERE a.icon IS NOT NULL AND a.extension != 'svg'
-                     GROUP BY a.icon, a.type
+                     GROUP BY x.icon, x.type
                      ORDER BY MAX(COALESCE(m.popularity, t.popularity, p.popularity, st.popularity, 0)) DESC",
                 )?;
                 let rows = stmt

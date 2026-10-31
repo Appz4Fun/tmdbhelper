@@ -1227,6 +1227,95 @@ pub fn write_person(conn: &Connection, ctx: &WriteContext, p: &Value) -> Result<
     images(conn, &id, p)
 }
 
+pub fn mark_fanart_checked(conn: &Connection, id: &str) -> Result<()> {
+    conn.prepare_cached("UPDATE baseitem SET fanart_tv=1 WHERE id=?1")?
+        .execute([id])?;
+    Ok(())
+}
+
+/// How `get_fanart_tv` sorts a fanart.tv art list: (art type, how it treats seasons).
+fn fanart_type(key: &str) -> Option<(&'static str, FanartSeasons)> {
+    use FanartSeasons::*;
+    Some(match key {
+        "movieposter" | "tvposter" => ("poster", Without),
+        "moviebackground" => ("fanart", Without),
+        "moviethumb" | "tvthumb" => ("landscape", Without),
+        "moviebanner" | "tvbanner" => ("banner", Without),
+        "hdmovieclearart" | "movieclearart" | "hdclearart" | "clearart" => ("clearart", Without),
+        "hdmovielogo" | "movielogo" | "hdtvlogo" | "clearlogo" => ("clearlogo", Without),
+        "moviedisc" => ("discart", Without),
+        "characterart" => ("characterart", Without),
+        "showbackground" => ("fanart", ShowWhenAll),
+        "seasonposter" => ("poster", SeasonOnly),
+        "seasonbanner" => ("banner", SeasonOnly),
+        "seasonthumb" => ("landscape", SeasonOnly),
+        _ => return None,
+    })
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum FanartSeasons {
+    Without,
+    /// `season=all` means the show's own art.
+    ShowWhenAll,
+    /// `season=all` is an "all seasons" image, which TMDBHelper files under season -1.
+    SeasonOnly,
+}
+
+/// Writes a fanart.tv response, then marks the item as checked.
+pub fn write_fanart(conn: &Connection, ctx: &WriteContext, id: &str, data: &Value) -> Result<()> {
+    let Some(lists) = data.as_object() else {
+        return mark_fanart_checked(conn, id);
+    };
+    for (key, list) in lists {
+        let Some((art_type, seasons)) = fanart_type(key) else {
+            continue;
+        };
+        for art in array(list) {
+            let Some(icon) = art["url"].as_str().filter(|u| !u.is_empty()) else {
+                continue;
+            };
+            let parent = if seasons == FanartSeasons::Without {
+                id.to_owned()
+            } else {
+                let season = match art["season"].as_str().filter(|s| !s.is_empty()) {
+                    Some("all") | None if seasons == FanartSeasons::SeasonOnly => "-1",
+                    Some("all") | None => "all",
+                    Some(number) => number,
+                };
+                if season == "all" {
+                    id.to_owned()
+                } else {
+                    let season_id = format!("{id}.{season}");
+                    base_stub(conn, ctx, &season_id, "season")?;
+                    season_id
+                }
+            };
+            fill(
+                conn,
+                "fanart_tv",
+                "icon, type, parent_id",
+                &[
+                    ("icon", text(icon)),
+                    ("iso_language", sql(&art["lang"])),
+                    (
+                        "likes",
+                        art["likes"]
+                            .as_str()
+                            .and_then(|l| l.parse().ok())
+                            .map_or_else(|| sql(&art["likes"]), Sql::Integer),
+                    ),
+                    ("quality", Sql::Integer(key.starts_with("hd") as i64)),
+                    ("type", text(art_type)),
+                    ("extension", extension(icon)),
+                    ("parent_id", text(&parent)),
+                ],
+            )?;
+        }
+    }
+    mark_fanart_checked(conn, id)
+}
+
 pub fn write_collection(conn: &Connection, ctx: &WriteContext, c: &Value) -> Result<()> {
     let tmdb_id = c["id"].as_i64().unwrap_or_default();
     let id = format!("collection.{tmdb_id}");

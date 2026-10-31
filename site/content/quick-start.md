@@ -65,6 +65,17 @@ warmup-rs --all-ids --min-free-gb=100
 
 This is about 6.5 million items plus all of their seasons and episodes, which takes a week or more. Images use about 2.4 GB a minute at first, and the full set can take several TB. The most popular items come first, and both crawls pause at `--min-free-gb`, so you can stop whenever you have enough. Metadata is far smaller than images, so give images mode the higher `--min-free-gb`, or images fill the disk and pause the metadata crawl too.
 
+## Run the fanart crawl
+
+If the add-on's fanart.tv lookup is on, TMDBHelper ignores a movie or show until warmup-rs has checked fanart.tv for it. In a third terminal:
+
+```bash
+export WARMUP_FANART_API_KEY="$(cat ~/.config/tmdbhelper/fanart.key)"
+warmup-rs --mode=fanart
+```
+
+It waits for the metadata crawl to write more items when it catches up.
+
 ## Change the output folder
 
 Use `--output-dir` or `WARMUP_OUTPUT_DIR` to write somewhere else:
@@ -81,7 +92,7 @@ Stop both crawls, then copy the files to the Kodi device:
 
 | File | Kodi location |
 |---|---|
-| `output/ItemDetails.db` | `userdata/addon_data/plugin.video.themoviedb.helper/database_07/ItemDetails.db` |
+| `output/ItemDetails.db` | `userdata/addon_data/plugin.video.themoviedb.helper/database_07/ItemDetails.db`, or `database_07/ItemDetails.db` under the add-on's cache location setting if you set one |
 | `output/Textures13.db` | `userdata/Database/Textures13.db` |
 | `output/images/` | `userdata/Thumbnails/` |
 

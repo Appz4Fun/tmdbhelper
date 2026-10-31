@@ -355,3 +355,54 @@ fn person_and_collection_are_cache_hits() {
     );
     no_dangling_rows(&conn);
 }
+
+#[test]
+fn fanart_marks_the_item_and_files_season_art() {
+    let (conn, _) = common::scratch_db();
+    let show =
+        json!({"id": 1, "name": "Show", "first_air_date": "2000-01-01", "in_production": false});
+    mapper::write_tv(&conn, &ctx(), &show, &[]).unwrap();
+    assert_eq!(
+        value(&conn, "SELECT fanart_tv FROM baseitem WHERE id='tv.1'").unwrap(),
+        "Integer(0)"
+    );
+
+    let data = json!({
+        "name": "Show", "thetvdb_id": "9",
+        "hdtvlogo": [{"id": "1", "url": "https://assets.fanart.tv/logo.png", "lang": "en", "likes": "5"}],
+        "tvposter": [{"id": "2", "url": "https://assets.fanart.tv/poster.jpg", "lang": "", "likes": "0"}],
+        "showbackground": [
+            {"id": "3", "url": "https://assets.fanart.tv/all.jpg", "lang": "", "likes": "1", "season": "all"},
+            {"id": "4", "url": "https://assets.fanart.tv/s2.jpg", "lang": "en", "likes": "1", "season": "2"}],
+        "seasonposter": [{"id": "5", "url": "https://assets.fanart.tv/sall.jpg", "lang": "en", "likes": "1", "season": "all"}],
+        "tvunknown": [{"id": "6", "url": "https://assets.fanart.tv/skip.jpg"}],
+    });
+    mapper::write_fanart(&conn, &ctx(), "tv.1", &data).unwrap();
+
+    assert_eq!(
+        value(&conn, "SELECT fanart_tv FROM baseitem WHERE id='tv.1'").unwrap(),
+        "Integer(1)"
+    );
+    assert_eq!(count(&conn, "SELECT COUNT(*) FROM fanart_tv"), 5);
+    let row = "SELECT type || '|' || quality || '|' || likes || '|' || iso_language || '|' || extension FROM fanart_tv WHERE icon LIKE '%logo.png'";
+    assert_eq!(value(&conn, row).unwrap(), "Text(\"clearlogo|1|5|en|png\")");
+    let parent = |icon: &str| {
+        value(
+            &conn,
+            &format!("SELECT parent_id FROM fanart_tv WHERE icon LIKE '%{icon}'"),
+        )
+        .unwrap()
+    };
+    assert_eq!(parent("all.jpg"), "Text(\"tv.1\")");
+    assert_eq!(parent("s2.jpg"), "Text(\"tv.1.2\")");
+    assert_eq!(parent("sall.jpg"), "Text(\"tv.1.-1\")");
+    assert_eq!(
+        value(
+            &conn,
+            "SELECT iso_language FROM fanart_tv WHERE icon LIKE '%poster.jpg'"
+        )
+        .unwrap(),
+        "Null"
+    );
+    no_dangling_rows(&conn);
+}

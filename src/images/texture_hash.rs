@@ -87,6 +87,9 @@ pub fn cached_filename(url: &str, extension: &str) -> String {
 /// Every URL TMDBHelper can ask for at any `artwork_quality` setting, from
 /// `IMAGEPATH_QUALITY_*` in its consts.py. They all point at the one original file.
 pub fn url_variants(path: &str, art_type: &str) -> Vec<String> {
+    if is_full_url(path) {
+        return vec![download_url(path)];
+    }
     let sizes: &[&str] = match art_type {
         "posters" | "profiles" => &["original", "w780", "w500", "w342"],
         "logos" => &["original", "w500", "w300"],
@@ -101,7 +104,16 @@ pub fn url_variants(path: &str, art_type: &str) -> Vec<String> {
 /// Every image downloads at `original`, the only size TMDB serves unchanged.
 pub const DOWNLOAD_SIZE: &str = "original";
 
+/// fanart.tv rows hold a whole URL, where TMDB rows hold a path.
+fn is_full_url(path: &str) -> bool {
+    path.starts_with("https://") || path.starts_with("http://")
+}
+
 pub fn download_url(path: &str) -> String {
+    if is_full_url(path) {
+        // TMDBHelper encodes the spaces fanart.tv leaves in some URLs.
+        return path.replace(' ', "%20");
+    }
     format!("{}{}{}", TMDB_CDN, DOWNLOAD_SIZE, path)
 }
 
@@ -171,6 +183,14 @@ mod tests {
             urls("/l.png", "logos"),
             ["original/l.png", "w500/l.png", "w300/l.png"]
         );
+    }
+
+    #[test]
+    fn fanart_urls_register_as_themselves() {
+        let url = "https://assets.fanart.tv/fanart/the show-1.png";
+        let encoded = "https://assets.fanart.tv/fanart/the%20show-1.png";
+        assert_eq!(url_variants(url, "clearlogo"), [encoded]);
+        assert_eq!(download_url(url), encoded);
     }
 
     #[test]

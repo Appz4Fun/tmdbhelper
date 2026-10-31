@@ -13,6 +13,7 @@ lede = "warmup-rs is one crate with a library and a binary. The binary parses fl
 | `src/paths.rs` | Platform detection, default paths, and creating a fresh `ItemDetails.db`. |
 | `src/worker.rs` | The metadata crawl: fetch, find children, and the batch writer. |
 | `src/seed.rs` | TMDB's trending and popular lists, and its daily ID lists, used as seeds. |
+| `src/fanart.rs` | The fanart.tv crawl. |
 | `src/state.rs` | The `state.db` queue and visited set. |
 | `src/id.rs` | TMDBHelper's item ID and media type conventions. |
 | `src/api/` | The TMDB client, which sorts failures by what the crawl does next. |
