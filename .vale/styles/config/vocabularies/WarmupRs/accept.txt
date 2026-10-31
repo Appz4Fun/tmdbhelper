@@ -35,3 +35,5 @@ Docker
 codegen
 toolchain
 passthrough
+opkg
+Entware
