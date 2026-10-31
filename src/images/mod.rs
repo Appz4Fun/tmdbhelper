@@ -87,7 +87,22 @@ pub async fn run(
     textures_db_path: PathBuf,
     thumbnails_dir: PathBuf,
     concurrency: usize,
+    min_free_bytes: u64,
 ) -> Result<()> {
+    tokio::task::spawn_blocking({
+        let textures_db_path = textures_db_path.clone();
+        let thumbnails_dir = thumbnails_dir.clone();
+        move || -> Result<()> {
+            let db = texture_db::TextureDb::open(&textures_db_path)?;
+            let deleted = db.purge_lower_quality(&thumbnails_dir)?;
+            if deleted > 0 {
+                info!("deleted {deleted} images below full quality");
+            }
+            Ok(())
+        }
+    })
+    .await??;
+
     let sem = Arc::new(Semaphore::new(concurrency));
     let (tx, mut rx) = mpsc::channel::<DownloadResult>(200);
     let (reg_tx, mut reg_rx) = mpsc::channel::<RegisterOnly>(200);
@@ -134,6 +149,15 @@ pub async fn run(
                     registered += 1;
                 }
 
+                // With nothing waiting, save what's done so far: a batch can sit
+                // unwritten for the whole 5-minute wait between cycles otherwise.
+                if rx.is_empty() && !batch.is_empty() {
+                    if let Err(e) = db.insert_texture_batch(&batch) {
+                        error!("texture batch insert failed: {:?}", e);
+                    }
+                    batch.clear();
+                }
+
                 let dl = match rx.blocking_recv() {
                     Some(dl) => dl,
                     None => break,
@@ -144,7 +168,12 @@ pub async fn run(
                     let _ = std::fs::create_dir_all(parent);
                 }
 
-                if let Err(e) = std::fs::write(&file_path, &dl.bytes) {
+                // Writing to a temporary name means a stopped run can't leave a
+                // truncated file that later cycles count as finished.
+                let temp_path = file_path.with_extension("part");
+                if let Err(e) = std::fs::write(&temp_path, &dl.bytes)
+                    .and_then(|()| std::fs::rename(&temp_path, &file_path))
+                {
                     error!("write {} failed: {:?}", file_path.display(), e);
                     continue;
                 }
@@ -195,7 +224,20 @@ pub async fn run(
             move || -> Result<Vec<ArtRow>> {
                 let conn = Connection::open_with_flags(&p, OpenFlags::SQLITE_OPEN_READ_ONLY)
                     .with_context(|| format!("open ItemDetails.db {}", p.display()))?;
-                let mut stmt = conn.prepare("SELECT DISTINCT icon, type FROM art")?;
+                // Most popular first, so a disk limit keeps the art people will see.
+                // SVG logos are skipped because TMDBHelper only shows PNG logos.
+                let mut stmt = conn.prepare(
+                    "SELECT a.icon, a.type FROM art a
+                     LEFT JOIN movie m ON m.id = a.parent_id
+                     LEFT JOIN tvshow t ON t.id = a.parent_id
+                     LEFT JOIN person p ON p.id = a.parent_id
+                     LEFT JOIN season s ON s.id = a.parent_id
+                     LEFT JOIN episode e ON e.id = a.parent_id
+                     LEFT JOIN tvshow st ON st.id = COALESCE(s.tvshow_id, e.tvshow_id)
+                     WHERE a.icon IS NOT NULL AND a.extension != 'svg'
+                     GROUP BY a.icon, a.type
+                     ORDER BY MAX(COALESCE(m.popularity, t.popularity, p.popularity, st.popularity, 0)) DESC",
+                )?;
                 let rows = stmt
                     .query_map([], |r| {
                         Ok(ArtRow {
@@ -220,14 +262,18 @@ pub async fn run(
             continue;
         }
 
-        const MIN_FREE_BYTES: u64 = 10 * 1024 * 1024 * 1024;
-        let free = fs2::available_space(&thumbnails_dir).unwrap_or(u64::MAX);
-        if free < MIN_FREE_BYTES {
-            info!(
-                "image cycle skipped: {}MB free < {}MB minimum, sleeping 5 minutes",
-                free / (1024 * 1024),
-                MIN_FREE_BYTES / (1024 * 1024)
-            );
+        let has_room = || {
+            let free = fs2::available_space(&thumbnails_dir).unwrap_or(u64::MAX);
+            if free < min_free_bytes {
+                warn!(
+                    "image downloads paused: {}MB free is under the {}MB minimum, sleeping 5 minutes",
+                    free / (1024 * 1024),
+                    min_free_bytes / (1024 * 1024)
+                );
+            }
+            free >= min_free_bytes
+        };
+        if !has_room() {
             tokio::time::sleep(Duration::from_secs(300)).await;
             continue;
         }
@@ -273,7 +319,7 @@ pub async fn run(
 
         for row in &art_rows {
             let ext = row.path.rsplit('.').next().unwrap_or("jpg");
-            let download_url = texture_hash::download_url(&row.path, &row.art_type);
+            let download_url = texture_hash::download_url(&row.path);
             let cached_filename = texture_hash::cached_filename(&download_url, ext);
 
             if existing_files.contains(&cached_filename) {
@@ -364,6 +410,9 @@ pub async fn run(
             });
 
             dispatched += 1;
+            if dispatched.is_multiple_of(1000) && !has_room() {
+                break;
+            }
             if dispatched.is_multiple_of(10000) {
                 info!(
                     "image dispatch progress: dispatched={} skipped={}",

@@ -53,7 +53,17 @@ In a second terminal, from the same folder:
 warmup-rs --mode=images
 ```
 
-Images mode doesn't need an API key. It reads the art paths that the metadata crawl wrote, so start it after the metadata crawl has written some items. It scans for new art every 5 minutes. A full image crawl takes hundreds of GB.
+Images mode doesn't need an API key. It reads the art paths that the metadata crawl wrote, so start it after the metadata crawl has written some items. It scans for new art every 5 minutes.
+
+## Collect everything
+
+The default crawl covers popular titles and everything two hops from them. To queue every title, person, and collection TMDB lists, leaving out adult items:
+
+```bash
+warmup-rs --all-ids --min-free-gb=100
+```
+
+This is about 6.5 million items plus all of their seasons and episodes, which takes weeks. The full image set can take several TB. The most popular items come first, and both crawls pause at `--min-free-gb`, so you can stop whenever you have enough.
 
 ## Change the output folder
 
@@ -75,4 +85,11 @@ Stop both crawls, then copy the files to the Kodi device:
 | `output/Textures13.db` | `userdata/Database/Textures13.db` |
 | `output/images/` | `userdata/Thumbnails/` |
 
-Stop Kodi before you replace its databases. To keep the caches warm on the device itself, see [Run it on a Kodi box](kodi-box.md).
+Stop Kodi before you replace its databases, and update TMDBHelper first: warmup-rs writes schema version 50, from TMDBHelper 6.19.
+
+Both databases use a write-ahead log, so copy them only after you merge it:
+
+```bash
+sqlite3 output/ItemDetails.db 'PRAGMA wal_checkpoint(TRUNCATE);'
+sqlite3 output/Textures13.db 'PRAGMA wal_checkpoint(TRUNCATE);'
+``` To keep the caches warm on the device itself, see [Run it on a Kodi box](kodi-box.md).

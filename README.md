@@ -6,7 +6,7 @@ add-on by writing directly to SQLite. It doesn't use JSON-RPC, the Python
 add-on, or Kodi itself.
 
 1. **`ItemDetails.db`**: TMDBHelper's metadata cache, about 30 tables such as
-   `movie`, `tvshow`, `person`, `castmember`, `art`, and `ratings`.
+   `movie`, `tvshow`, `season`, `episode`, `person`, `castmember`, and `art`.
 2. **`Textures13.db` and the thumbnails folder**: Kodi's image cache, so the
    interface never has to fetch artwork on demand.
 
@@ -66,8 +66,8 @@ CoreELEC, LibreELEC, or OpenELEC. On an appliance, TMDBHelper must have created
 
 | Mode | What it does |
 |------|--------------|
-| `metadata` | The default. Crawls TMDB and writes `ItemDetails.db`, starting from TMDB's trending and popular lists and following credits, similar titles, recommendations, filmographies, and collections up to two hops away. |
-| `images` | Reads every art path from `ItemDetails.db`, downloads each image from the TMDB image servers, saves it in the images folder, and registers every URL size in `Textures13.db`, so Kodi gets a cache hit at any `imageres` or `fanartres` setting. |
+| `metadata` | The default. Crawls TMDB and writes `ItemDetails.db`, starting from TMDB's trending and popular lists and following credits, similar titles, recommendations, filmographies, and collections up to two hops away. It also fetches every season and episode of each show. With `--all-ids`, it queues everything in TMDB's daily ID lists. |
+| `images` | Reads every art path from `ItemDetails.db`, downloads each image at `original` size, saves it in the images folder, and registers every URL TMDBHelper can request in `Textures13.db`, so Kodi gets a cache hit at any `artwork_quality` setting. |
 | `smoke` | Opens an in-memory SQLite database, builds an HTTP client, and exits. Use it to check that the binary runs on a device. |
 
 Both real modes are restart-safe, and you can run them at the same time. See
@@ -83,7 +83,10 @@ text.
 |------|----------|---------|
 | `--mode` | `WARMUP_MODE` | `metadata` |
 | `--tmdb-api-key` | `WARMUP_TMDB_API_KEY` | Required in metadata mode |
-| `--concurrency` | `WARMUP_CONCURRENCY` | `40` |
+| `--concurrency` | `WARMUP_CONCURRENCY` | `20` |
+| `--language` | `WARMUP_LANGUAGE` | `en-US` |
+| `--all-ids` | `WARMUP_ALL_IDS` | Off |
+| `--min-free-gb` | `WARMUP_MIN_FREE_GB` | `10` |
 | `--batch-size` | `WARMUP_BATCH_SIZE` | `200` |
 | `--output-dir` | `WARMUP_OUTPUT_DIR` | `./output`, desktop systems only |
 | `--state-db` | `WARMUP_STATE_DB` | Depends on the platform |
@@ -97,7 +100,7 @@ The [Justfile](Justfile) wraps the usual commands. Run `just` to list them.
 
 | Recipe | What it does |
 |--------|--------------|
-| `just test`, `just fmt`, `just lint` | Runs the tests, `cargo fmt`, and `cargo fmt --check` plus Clippy. |
+| `just test`, `just test-live`, `just fmt`, `just lint` | Runs the offline tests, the tests that call TMDB, `cargo fmt`, and `cargo fmt --check` plus Clippy. |
 | `just run`, `just help` | Runs the release build with its defaults, or prints its help. |
 | `just build`, `just build-release`, `just build-debug` | Builds for this computer. |
 | `just build-release-x86`, `just build-release-arm` | Builds static musl binaries for `x86_64` and `aarch64` Linux with [cross](https://github.com/cross-rs/cross). |

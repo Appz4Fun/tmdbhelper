@@ -26,7 +26,7 @@ facts = ["One static binary", "Restart-safe crawls", "Kodi-compatible image cach
 
 [TMDBHelper](https://github.com/jurialmunkey/plugin.video.themoviedb.helper) is a Kodi add-on that shows movie, TV, and people pages from TMDB. It caches what it fetches in two places:
 
-- **`ItemDetails.db`**, TMDBHelper's metadata cache of about 30 tables, such as `movie`, `tvshow`, `person`, `castmember`, `art`, and `ratings`.
+- **`ItemDetails.db`**, TMDBHelper's metadata cache of about 30 tables, such as `movie`, `tvshow`, `season`, `episode`, `person`, `castmember`, and `art`.
 - **`Textures13.db` and the thumbnails folder**, Kodi's image cache, so artwork shows without a download.
 
 Filling those caches through Kodi is slow, because every item goes through the Python add-on and JSON-RPC. warmup-rs skips that layer. It asks TMDB for everything about an item in one request, writes the rows TMDBHelper expects, and commits them in large batches. On a 4-core ARM box with a USB 3.0 SSD, it warms about 40 metadata items and 45 images a second.

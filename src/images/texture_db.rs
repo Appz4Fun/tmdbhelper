@@ -1,3 +1,4 @@
+use crate::images::texture_hash::cached_filename;
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OpenFlags};
 use std::collections::HashSet;
@@ -62,6 +63,48 @@ impl TextureDb {
             .prepare_cached("SELECT 1 FROM texture WHERE url=?1 LIMIT 1")
             .and_then(|mut s| s.query_row(params![url], |_| Ok(())))
             .is_ok()
+    }
+
+    /// Removes images older versions downloaded below full quality, and SVG logos,
+    /// which TMDBHelper never shows. Returns the number of files it deleted. The
+    /// next image cycle downloads their originals.
+    pub fn purge_lower_quality(&self, thumbnails_dir: &Path) -> Result<usize> {
+        let mut stale = HashSet::new();
+        {
+            let mut stmt = self.conn.prepare("SELECT url, cachedurl FROM texture")?;
+            let rows =
+                stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+            for row in rows {
+                let (url, cached) = row?;
+                let ext = url.rsplit('.').next().unwrap_or("jpg");
+                // A file is named for the URL it came from, so this finds the
+                // files downloaded at this size, not the ones merely registered.
+                let downloaded_small =
+                    url.contains("/w1280/") && cached_filename(&url, ext) == cached;
+                if downloaded_small || ext.eq_ignore_ascii_case("svg") {
+                    stale.insert(cached);
+                }
+            }
+        }
+        let mut deleted = 0;
+        let tx = self.conn.unchecked_transaction()?;
+        {
+            let mut del_sizes = tx.prepare(
+                "DELETE FROM sizes WHERE idtexture IN (SELECT id FROM texture WHERE cachedurl=?1)",
+            )?;
+            let mut del_texture = tx.prepare("DELETE FROM texture WHERE cachedurl=?1")?;
+            for cached in &stale {
+                del_sizes.execute(params![cached])?;
+                del_texture.execute(params![cached])?;
+                match std::fs::remove_file(thumbnails_dir.join(cached)) {
+                    Ok(()) => deleted += 1,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(e).with_context(|| format!("delete {cached}")),
+                }
+            }
+        }
+        tx.commit()?;
+        Ok(deleted)
     }
 
     pub fn load_all_cached_urls(&self) -> Result<HashSet<String>> {
@@ -243,6 +286,41 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM sizes", [], |r| r.get(0))
             .unwrap();
         assert_eq!(sizes, 1);
+    }
+
+    #[test]
+    fn purge_removes_only_lower_quality_and_svg_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let f = NamedTempFile::new().unwrap();
+        let db = TextureDb::open(f.path()).unwrap();
+        let small_url = "https://image.tmdb.org/t/p/w1280/poster.jpg";
+        let small = cached_filename(small_url, "jpg");
+        // A backdrop's file came from `original`, and w1280 only points at it.
+        let full_url = "https://image.tmdb.org/t/p/original/backdrop.jpg";
+        let full = cached_filename(full_url, "jpg");
+        let svg_url = "https://image.tmdb.org/t/p/original/logo.svg";
+        let svg = cached_filename(svg_url, "svg");
+        for (url, cached) in [
+            (small_url, &small),
+            ("https://image.tmdb.org/t/p/original/poster.jpg", &small),
+            (full_url, &full),
+            ("https://image.tmdb.org/t/p/w1280/backdrop.jpg", &full),
+            (svg_url, &svg),
+        ] {
+            db.insert_texture(url, cached, 10, 10).unwrap();
+            let path = dir.path().join(cached);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, b"x").unwrap();
+        }
+
+        assert_eq!(db.purge_lower_quality(dir.path()).unwrap(), 2);
+        assert!(!dir.path().join(&small).exists());
+        assert!(!dir.path().join(&svg).exists());
+        assert!(dir.path().join(&full).exists());
+        assert!(!db.is_cached(small_url));
+        assert!(!db.is_cached("https://image.tmdb.org/t/p/original/poster.jpg"));
+        assert!(db.is_cached(full_url));
+        assert!(db.is_cached("https://image.tmdb.org/t/p/w1280/backdrop.jpg"));
     }
 
     #[test]

@@ -18,6 +18,10 @@ default:
 test *args:
     cargo test {{args}}
 
+# Runs the tests that call TMDB. Needs TMDB_API_KEY.
+test-live:
+    cargo test --test live_tmdb -- --ignored
+
 # Formats the Rust code with rustfmt.
 fmt:
     cargo fmt --all

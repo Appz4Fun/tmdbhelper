@@ -11,7 +11,10 @@ lede = "Every flag has an environment variable, which is handy in systemd units.
 |---|---|---|---|
 | `--mode` | `WARMUP_MODE` | `metadata` | `metadata`, `images`, or `smoke`. |
 | `--tmdb-api-key` | `WARMUP_TMDB_API_KEY` | none | TMDB API v3 key. Required in metadata mode. |
-| `--concurrency` | `WARMUP_CONCURRENCY` | `40` | Number of concurrent requests to TMDB. |
+| `--concurrency` | `WARMUP_CONCURRENCY` | `20` | Number of concurrent requests to TMDB. |
+| `--language` | `WARMUP_LANGUAGE` | `en-US` | The add-on's language setting. TMDBHelper ignores rows in any other language. |
+| `--all-ids` | `WARMUP_ALL_IDS` | off | Queues every title, person, and collection from TMDB's daily ID lists in metadata mode. |
+| `--min-free-gb` | `WARMUP_MIN_FREE_GB` | `10` | Pauses when the output disk has less free space than this many GB. |
 | `--batch-size` | `WARMUP_BATCH_SIZE` | `200` | Number of items to take from the queue per loop in metadata mode. |
 | `--output-dir` | `WARMUP_OUTPUT_DIR` | `./output` | Base folder for the default paths on desktop systems. |
 | `--state-db` | `WARMUP_STATE_DB` | See [Paths](#paths) | Crawler queue and visited-item database. |
