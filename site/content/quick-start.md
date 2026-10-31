@@ -86,6 +86,8 @@ warmup-rs --output-dir=/mnt/media/tmdb
 
 Each path flag, such as `--item-details-db`, overrides one file. See [Command-line options](cli.md).
 
+Keep the databases on a local disk, because SQLite's write-ahead log isn't reliable on a network share. Images are fine on one: pass `--thumbnails-dir` in images mode, and `--min-free-gb` then applies to that share.
+
 ## Use the results in Kodi
 
 Stop both crawls, then copy the files to the Kodi device:
