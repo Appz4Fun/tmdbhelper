@@ -1,7 +1,7 @@
 use crate::images::texture_hash::cached_filename;
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OpenFlags};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 // Kodi's `idxTexture` and `idxSize` indexes aren't unique, so `INSERT OR IGNORE`
@@ -69,33 +69,42 @@ impl TextureDb {
     /// which TMDBHelper never shows. Returns the number of files it deleted. The
     /// next image cycle downloads their originals.
     pub fn purge_lower_quality(&self, thumbnails_dir: &Path) -> Result<usize> {
+        let mut by_file: HashMap<String, Vec<i64>> = HashMap::new();
         let mut stale = HashSet::new();
         {
-            let mut stmt = self.conn.prepare("SELECT url, cachedurl FROM texture")?;
-            let rows =
-                stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+            let mut stmt = self
+                .conn
+                .prepare("SELECT id, url, cachedurl FROM texture")?;
+            let rows = stmt.query_map([], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                ))
+            })?;
             for row in rows {
-                let (url, cached) = row?;
+                let (id, url, cached) = row?;
                 let ext = url.rsplit('.').next().unwrap_or("jpg");
                 // A file is named for the URL it came from, so this finds the
                 // files downloaded at this size, not the ones merely registered.
                 let downloaded_small =
                     url.contains("/w1280/") && cached_filename(&url, ext) == cached;
                 if downloaded_small || ext.eq_ignore_ascii_case("svg") {
-                    stale.insert(cached);
+                    stale.insert(cached.clone());
                 }
+                by_file.entry(cached).or_default().push(id);
             }
         }
         let mut deleted = 0;
         let tx = self.conn.unchecked_transaction()?;
         {
-            let mut del_sizes = tx.prepare(
-                "DELETE FROM sizes WHERE idtexture IN (SELECT id FROM texture WHERE cachedurl=?1)",
-            )?;
-            let mut del_texture = tx.prepare("DELETE FROM texture WHERE cachedurl=?1")?;
+            let mut del_sizes = tx.prepare("DELETE FROM sizes WHERE idtexture=?1")?;
+            let mut del_texture = tx.prepare("DELETE FROM texture WHERE id=?1")?;
             for cached in &stale {
-                del_sizes.execute(params![cached])?;
-                del_texture.execute(params![cached])?;
+                for id in by_file.get(cached).into_iter().flatten() {
+                    del_sizes.execute(params![id])?;
+                    del_texture.execute(params![id])?;
+                }
                 match std::fs::remove_file(thumbnails_dir.join(cached)) {
                     Ok(()) => deleted += 1,
                     Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}

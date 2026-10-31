@@ -39,6 +39,9 @@ pub fn open_writer(path: &Path) -> Result<Connection> {
          PRAGMA mmap_size=268435456;
          PRAGMA wal_autocheckpoint=1000;",
     )?;
+    // The writers use about 60 statements per item, and SQLite recompiles any
+    // that fall out of the cache, which is the slowest part of a write.
+    conn.set_prepared_statement_cache_capacity(256);
     let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
     if version != SCHEMA_VERSION {
         anyhow::bail!(
