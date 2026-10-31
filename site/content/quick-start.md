@@ -63,7 +63,7 @@ The default crawl covers popular titles and everything two hops from them. To qu
 warmup-rs --all-ids --min-free-gb=100
 ```
 
-This is about 6.5 million items plus all of their seasons and episodes, which takes weeks. The full image set can take several TB. The most popular items come first, and both crawls pause at `--min-free-gb`, so you can stop whenever you have enough.
+This is about 6.5 million items plus all of their seasons and episodes, which takes a week or more. Images use about 2.4 GB a minute at first, and the full set can take several TB. The most popular items come first, and both crawls pause at `--min-free-gb`, so you can stop whenever you have enough. Metadata is far smaller than images, so give images mode the higher `--min-free-gb`, or images fill the disk and pause the metadata crawl too.
 
 ## Change the output folder
 
