@@ -93,7 +93,10 @@ pub fn url_variants(path: &str, art_type: &str) -> Vec<String> {
         "stills" => &["original", "w780", "w300"],
         _ => &["original", "w780"],
     };
-    sizes.iter().map(|s| format!("{}{}{}", TMDB_CDN, s, path)).collect()
+    sizes
+        .iter()
+        .map(|s| format!("{}{}{}", TMDB_CDN, s, path))
+        .collect()
 }
 
 pub fn download_size(art_type: &str) -> &'static str {
@@ -114,14 +117,34 @@ mod tests {
     #[test]
     fn crc32_matches_kodi_textures13_db() {
         let cases = [
-            ("https://image.tmdb.org/t/p/w780/in1R2dDc421JxsoRWaIIAqVI2KE.jpg", "f/fa722c7d.jpg"),
-            ("https://image.tmdb.org/t/p/w780/aJrG7OkoTMPWG5c8opz8a93AZPY.jpg", "e/e98517d7.jpg"),
-            ("https://image.tmdb.org/t/p/w780/pRtJagIxpfODzzb0T0NAvZSzErC.jpg", "1/15f44dd2.jpg"),
-            ("https://image.tmdb.org/t/p/w780/70kTz0OmjjZe7zHvIDrq2iKW7PJ.jpg", "5/55027c9c.jpg"),
-            ("https://image.tmdb.org/t/p/w780/8iixmfGx5EIFPdpNvB2JvI3VIqX.jpg", "6/658b6069.jpg"),
+            (
+                "https://image.tmdb.org/t/p/w780/in1R2dDc421JxsoRWaIIAqVI2KE.jpg",
+                "f/fa722c7d.jpg",
+            ),
+            (
+                "https://image.tmdb.org/t/p/w780/aJrG7OkoTMPWG5c8opz8a93AZPY.jpg",
+                "e/e98517d7.jpg",
+            ),
+            (
+                "https://image.tmdb.org/t/p/w780/pRtJagIxpfODzzb0T0NAvZSzErC.jpg",
+                "1/15f44dd2.jpg",
+            ),
+            (
+                "https://image.tmdb.org/t/p/w780/70kTz0OmjjZe7zHvIDrq2iKW7PJ.jpg",
+                "5/55027c9c.jpg",
+            ),
+            (
+                "https://image.tmdb.org/t/p/w780/8iixmfGx5EIFPdpNvB2JvI3VIqX.jpg",
+                "6/658b6069.jpg",
+            ),
         ];
         for (url, expected) in cases {
-            assert_eq!(cached_filename(url, "jpg"), expected, "mismatch for {}", url);
+            assert_eq!(
+                cached_filename(url, "jpg"),
+                expected,
+                "mismatch for {}",
+                url
+            );
         }
     }
 

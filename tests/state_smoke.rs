@@ -1,6 +1,6 @@
+use rusqlite::Connection;
 use warmup_rs::id::TmdbType;
 use warmup_rs::state::StateDb;
-use rusqlite::Connection;
 
 fn make_state_schema(path: &std::path::Path) {
     let c = Connection::open(path).unwrap();
@@ -39,5 +39,9 @@ fn enqueue_pop_visited_roundtrip() {
 
     // Re-enqueue should skip already-visited
     s.enqueue_child(550, TmdbType::Movie, 0, 100.0).unwrap();
-    assert_eq!(s.queue_size().unwrap(), 0, "visited items should not re-enqueue");
+    assert_eq!(
+        s.queue_size().unwrap(),
+        0,
+        "visited items should not re-enqueue"
+    );
 }

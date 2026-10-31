@@ -1,0 +1,79 @@
+Fills TMDBHelper's metadata cache and Kodi's image cache by writing directly to SQLite.
+
+Usage: warmup-rs [OPTIONS]
+
+Options:
+      --mode <MODE>
+          Run mode
+
+          Possible values:
+          - metadata: crawl TMDB and write ItemDetails.db
+          - images:   download artwork and register it in Textures13.db
+          - smoke:    check that the binary runs, then exit without side effects
+          
+          [env: WARMUP_MODE=]
+          [default: metadata]
+
+      --tmdb-api-key <TMDB_API_KEY>
+          TMDB API v3 key. Required in metadata mode
+          
+          [env: WARMUP_TMDB_API_KEY]
+
+      --concurrency <CONCURRENCY>
+          Number of concurrent requests to TMDB
+          
+          [env: WARMUP_CONCURRENCY=]
+          [default: 40]
+
+      --batch-size <BATCH_SIZE>
+          Number of items to take from the queue per loop in metadata mode
+          
+          [env: WARMUP_BATCH_SIZE=]
+          [default: 200]
+
+      --output-dir <OUTPUT_DIR>
+          Base folder for the default paths on desktop systems
+          
+          [env: WARMUP_OUTPUT_DIR=]
+          [default: ./output]
+
+      --state-db <STATE_DB>
+          Crawler queue and visited-item database
+          
+          [env: WARMUP_STATE_DB=]
+
+      --item-details-db <ITEM_DETAILS_DB>
+          TMDBHelper's metadata database
+          
+          [env: WARMUP_ITEM_DETAILS_DB=]
+
+      --textures-db <TEXTURES_DB>
+          Kodi's texture cache database, used in images mode
+          
+          [env: WARMUP_TEXTURES_DB=]
+
+      --thumbnails-dir <THUMBNAILS_DIR>
+          Folder for downloaded images, used in images mode
+          
+          [env: WARMUP_THUMBNAILS_DIR=]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
+
+Default paths:
+  On CoreELEC, LibreELEC, and OpenELEC, the defaults point at Kodi's own files:
+    ItemDetails.db  /storage/.kodi/userdata/addon_data/plugin.video.themoviedb.helper/database_07/ItemDetails.db
+    state.db        /var/media/CACHE_DRIVE/tmdb/scriptcache/state.db
+    Textures13.db   /var/media/CACHE_DRIVE/tmdb/Textures13.db
+    Thumbnails      /var/media/CACHE_DRIVE/tmdb/Thumbnails
+  On Windows, macOS, and desktop Linux, everything goes under --output-dir:
+    ItemDetails.db, state.db, and Textures13.db in the output folder, and images in <output-dir>/images.
+  A path flag or its environment variable overrides the default.
+
+Examples:
+  warmup-rs --mode=smoke
+  WARMUP_TMDB_API_KEY=<key> warmup-rs
+  warmup-rs --mode=images --concurrency=25

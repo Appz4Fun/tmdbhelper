@@ -1,5 +1,5 @@
+use crate::api::types_movie::{ExternalIds, Images, TranslationList};
 use serde::Deserialize;
-use crate::api::types_movie::{Images, ExternalIds, TranslationList};
 
 #[derive(Debug, Deserialize)]
 pub struct PersonResponse {

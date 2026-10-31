@@ -1,7 +1,7 @@
+use crate::id::TmdbType;
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OpenFlags};
 use std::path::Path;
-use crate::id::TmdbType;
 
 pub type ChildBatch<'a> = (i64, TmdbType, &'a [(i64, TmdbType, f64)], i64);
 
@@ -38,8 +38,11 @@ fn type_from_str(s: &str) -> Option<TmdbType> {
 
 impl StateDb {
     pub fn open(path: &Path) -> Result<Self> {
-        let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE)
-            .with_context(|| format!("open state {}", path.display()))?;
+        let conn = Connection::open_with_flags(
+            path,
+            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
+        )
+        .with_context(|| format!("open state {}", path.display()))?;
         conn.execute_batch(
             "PRAGMA journal_mode=WAL;
              PRAGMA synchronous=OFF;
@@ -62,7 +65,9 @@ impl StateDb {
     /// Pop a batch of pending items, ordered by (depth ASC, popularity DESC).
     /// Removed from queue atomically. Caller must mark visited or re-enqueue on failure.
     pub fn pop_batch(&mut self, limit: usize) -> Result<Vec<QueueItem>> {
-        let tx = self.conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let tx = self
+            .conn
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
         let mut items = Vec::new();
         let mut raw_types = Vec::new();
         {
@@ -72,12 +77,22 @@ impl StateDb {
             )?;
             let rows = stmt.query_map(params![limit as i64], |r| {
                 let type_s: String = r.get(1)?;
-                Ok((r.get::<_, i64>(0)?, type_s, r.get::<_, i64>(2)?, r.get::<_, f64>(3).unwrap_or(0.0)))
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    type_s,
+                    r.get::<_, i64>(2)?,
+                    r.get::<_, f64>(3).unwrap_or(0.0),
+                ))
             })?;
             for row in rows {
                 let (id, type_s, depth, pop) = row?;
                 if let Some(t) = type_from_str(&type_s) {
-                    items.push(QueueItem { tmdb_id: id, tmdb_type: t, depth, popularity: pop });
+                    items.push(QueueItem {
+                        tmdb_id: id,
+                        tmdb_type: t,
+                        depth,
+                        popularity: pop,
+                    });
                     raw_types.push(type_s);
                 }
             }
@@ -93,7 +108,10 @@ impl StateDb {
     }
 
     pub fn mark_visited(&mut self, tmdb_id: i64, tmdb_type: TmdbType) -> Result<()> {
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs_f64();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64();
         self.conn.execute(
             "INSERT OR REPLACE INTO visited (tmdb_id, tmdb_type, visited_at, result) VALUES (?1, ?2, ?3, 'ok')",
             params![tmdb_id, type_to_str(tmdb_type), now],
@@ -101,12 +119,25 @@ impl StateDb {
         Ok(())
     }
 
-    pub fn enqueue_child(&mut self, tmdb_id: i64, tmdb_type: TmdbType, depth: i64, popularity: f64) -> Result<()> {
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs_f64();
+    pub fn enqueue_child(
+        &mut self,
+        tmdb_id: i64,
+        tmdb_type: TmdbType,
+        depth: i64,
+        popularity: f64,
+    ) -> Result<()> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64();
         let visited: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM visited WHERE tmdb_id=?1 AND tmdb_type=?2",
-            params![tmdb_id, type_to_str(tmdb_type)], |r| r.get(0))?;
-        if visited > 0 { return Ok(()); }
+            params![tmdb_id, type_to_str(tmdb_type)],
+            |r| r.get(0),
+        )?;
+        if visited > 0 {
+            return Ok(());
+        }
         self.conn.execute(
             "INSERT OR IGNORE INTO queue (tmdb_id, tmdb_type, depth, popularity, enqueued_at) VALUES (?1, ?2, ?3, ?4, ?5)",
             params![tmdb_id, type_to_str(tmdb_type), depth, popularity, now],
@@ -125,7 +156,10 @@ impl StateDb {
         children: &[(i64, TmdbType, f64)],
         child_depth: i64,
     ) -> Result<()> {
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs_f64();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64();
         let tx = self.conn.transaction()?;
         tx.execute(
             "INSERT OR REPLACE INTO visited (tmdb_id, tmdb_type, visited_at, result) VALUES (?1, ?2, ?3, 'ok')",
@@ -134,8 +168,12 @@ impl StateDb {
         for (cid, ctype, pop) in children {
             let already: i64 = tx.query_row(
                 "SELECT COUNT(*) FROM visited WHERE tmdb_id=?1 AND tmdb_type=?2",
-                params![*cid, type_to_str(*ctype)], |r| r.get(0))?;
-            if already > 0 { continue; }
+                params![*cid, type_to_str(*ctype)],
+                |r| r.get(0),
+            )?;
+            if already > 0 {
+                continue;
+            }
             tx.execute(
                 "INSERT OR IGNORE INTO queue (tmdb_id, tmdb_type, depth, popularity, enqueued_at) VALUES (?1, ?2, ?3, ?4, ?5)",
                 params![*cid, type_to_str(*ctype), child_depth, *pop, now],
@@ -148,11 +186,11 @@ impl StateDb {
     /// Mega-batch: visit + enqueue children for MULTIPLE items in ONE transaction.
     /// At 7/s with 20 items/batch, the old per-item tx pattern still costs 20 WAL
     /// commits per batch. This collapses them to 1.
-    pub fn visit_and_enqueue_multi(
-        &mut self,
-        items: &[ChildBatch<'_>],
-    ) -> Result<()> {
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs_f64();
+    pub fn visit_and_enqueue_multi(&mut self, items: &[ChildBatch<'_>]) -> Result<()> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64();
         let tx = self.conn.transaction()?;
         // Phase 1: mark ALL parents visited first, so children that overlap with
         // other parents in this batch won't be re-enqueued
@@ -167,8 +205,12 @@ impl StateDb {
             for (cid, ctype, pop) in *children {
                 let already: i64 = tx.query_row(
                     "SELECT COUNT(*) FROM visited WHERE tmdb_id=?1 AND tmdb_type=?2",
-                    params![*cid, type_to_str(*ctype)], |r| r.get(0))?;
-                if already > 0 { continue; }
+                    params![*cid, type_to_str(*ctype)],
+                    |r| r.get(0),
+                )?;
+                if already > 0 {
+                    continue;
+                }
                 tx.execute(
                     "INSERT OR IGNORE INTO queue (tmdb_id, tmdb_type, depth, popularity, enqueued_at) VALUES (?1, ?2, ?3, ?4, ?5)",
                     params![*cid, type_to_str(*ctype), *child_depth, *pop, now],
@@ -181,7 +223,9 @@ impl StateDb {
 
     pub fn requeue_expired(&mut self, max_age_days: i64) -> Result<i64> {
         let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH).unwrap().as_secs_f64();
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64();
         let cutoff = now - (max_age_days as f64 * 86400.0);
         let tx = self.conn.transaction()?;
         let count = tx.execute(
@@ -195,10 +239,14 @@ impl StateDb {
     }
 
     pub fn queue_size(&self) -> Result<i64> {
-        Ok(self.conn.query_row("SELECT COUNT(*) FROM queue", [], |r| r.get(0))?)
+        Ok(self
+            .conn
+            .query_row("SELECT COUNT(*) FROM queue", [], |r| r.get(0))?)
     }
 
     pub fn visited_count(&self) -> Result<i64> {
-        Ok(self.conn.query_row("SELECT COUNT(*) FROM visited", [], |r| r.get(0))?)
+        Ok(self
+            .conn
+            .query_row("SELECT COUNT(*) FROM visited", [], |r| r.get(0))?)
     }
 }

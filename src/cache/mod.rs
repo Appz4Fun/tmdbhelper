@@ -39,7 +39,10 @@ pub fn checkpoint_passive(conn: &Connection) {
 }
 
 pub fn now_unix() -> i64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
 }
 
 pub fn default_expiry() -> i64 {

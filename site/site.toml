@@ -1,0 +1,33 @@
+# Site settings for the warmup-rs documentation.
+
+[site]
+name = "warmup-rs"
+name_head = "warmup"
+name_tail = "-rs"
+crate = "warmup_rs"
+tagline = "a direct-write cache builder for TMDBHelper and Kodi"
+status = "v0.1"
+repo = "https://github.com/Appz4Fun/tmdbhelper"
+# Source links use the branch being built (GITHUB_REF_NAME in Actions), else this one.
+branch = "main"
+base_url = "https://appz4fun.github.io/tmdbhelper/"
+
+[[nav]]
+title = "Overview"
+pages = ["index", "how-it-works"]
+
+[[nav]]
+title = "Get started"
+pages = ["install", "quick-start", "docker"]
+
+[[nav]]
+title = "Guides"
+pages = ["kodi-box", "operate"]
+
+[[nav]]
+title = "Reference"
+pages = ["cli", "justfile", "layout"]
+
+[[nav]]
+title = "Project"
+pages = ["contributing"]
