@@ -31,6 +31,11 @@ export WARMUP_TMDB_API_KEY=<your key>
 ./target/release/warmup-rs --mode=images  # image crawl, in a second terminal
 ```
 
+The key is the v3 **API Key** from **Settings > API** on
+[themoviedb.org](https://www.themoviedb.org), and it's the only credential you
+need. To keep it out of your shell history, see
+[Save the key](https://appz4fun.github.io/tmdbhelper/quick-start.html#save-the-key).
+
 On Windows, macOS, and desktop Linux, everything goes under `./output` in the
 current folder:
 

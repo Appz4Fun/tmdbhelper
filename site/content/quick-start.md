@@ -7,16 +7,29 @@ lede = "On a desktop, warmup-rs writes everything to an output folder in the cur
 
 ## Get a TMDB API key
 
-Create a free account at [themoviedb.org](https://www.themoviedb.org), then request an API key under **Settings > API**. warmup-rs uses the v3 key.
+Create a free account at [themoviedb.org](https://www.themoviedb.org), then request an API key under **Settings > API**. warmup-rs uses the v3 **API Key**, a 32-character hex string, not the longer **API Read Access Token**. It's the only credential warmup-rs needs.
+
+## Save the key
+
+warmup-rs reads the key from `--tmdb-api-key` or `WARMUP_TMDB_API_KEY`, and it doesn't look for a key file. To avoid retyping the key, and to keep it out of your shell history, save it in a private file. This works in bash and zsh. Paste the key at the prompt, which doesn't show what you paste:
+
+```bash
+mkdir -p ~/.config/tmdbhelper
+(umask 077; printf 'TMDB API key: '; read -rs key; echo; printf '%s\n' "$key" > ~/.config/tmdbhelper/tmdb.key)
+```
+
+Keep the file out of any Git repository.
 
 ## Run the metadata crawl
 
 From the folder where you want the output:
 
 ```bash
-export WARMUP_TMDB_API_KEY=<your key>
+export WARMUP_TMDB_API_KEY="$(cat ~/.config/tmdbhelper/tmdb.key)"
 warmup-rs
 ```
+
+In Windows PowerShell, set the variable with `$env:WARMUP_TMDB_API_KEY = "<your key>"`.
 
 From a clone of the repository, `just run` does the same with a release build.
 
