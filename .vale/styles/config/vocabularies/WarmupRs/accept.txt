@@ -36,3 +36,4 @@ codegen
 toolchain
 passthrough
 [Ff]anart
+zsh

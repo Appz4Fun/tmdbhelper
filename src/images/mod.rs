@@ -98,8 +98,10 @@ fn save_image(dir: &Path, cached_filename: &str, bytes: &[u8]) -> std::io::Resul
     }
     let id = NEXT_TEMP_ID.fetch_add(1, Ordering::Relaxed);
     let temp_path = file_path.with_extension(format!("{id}.part"));
-    std::fs::write(&temp_path, bytes)?;
-    if let Err(e) = std::fs::rename(&temp_path, &file_path) {
+    // Every attempt has a new name, so a failed one must not leave its file behind.
+    if let Err(e) =
+        std::fs::write(&temp_path, bytes).and_then(|()| std::fs::rename(&temp_path, &file_path))
+    {
         let _ = std::fs::remove_file(&temp_path);
         return Err(e);
     }
