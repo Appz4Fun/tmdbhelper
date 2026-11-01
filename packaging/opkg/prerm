@@ -14,4 +14,7 @@ if [ -d "$TARGET" ] && command -v systemctl >/dev/null 2>&1; then
     done
     systemctl daemon-reload
 fi
+for script in /opt/etc/init.d/S90warmup-rs /opt/etc/init.d/S91warmup-images; do
+    [ -x "$script" ] && "$script" stop >/dev/null 2>&1
+done
 exit 0

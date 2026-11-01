@@ -1,0 +1,8 @@
+#!/bin/sh
+# Runs the warmup-rs image crawl on Entware systems without systemd.
+# To start it at boot, set ENABLED=yes. Package upgrades keep this file.
+ENABLED=no
+NAME=warmup-images
+MODE=images
+# shellcheck disable=SC1091
+. /opt/share/warmup-rs/warmup.sh

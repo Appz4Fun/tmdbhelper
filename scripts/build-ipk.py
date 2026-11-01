@@ -23,6 +23,9 @@ ARCH = "aarch64-3.10"
 RELEASE = "1"
 ENV_FILE = "opt/etc/warmup-rs.env"
 UNITS = ("tmdbhelper-warmup-rs.service", "tmdbhelper-warmup-images.service")
+# Init scripts for Entware systems without systemd. They're conffiles, so an
+# upgrade keeps the ENABLED setting.
+INIT_SCRIPTS = ("S90warmup-rs", "S91warmup-images")
 
 
 def gzipped(data):
@@ -62,14 +65,18 @@ def main():
         raise SystemExit(f"{args.binary} isn't an aarch64 Linux binary")
 
     unit_files = [(f"opt/share/warmup-rs/systemd/{u}", 0o644, (SOURCE / u).read_bytes()) for u in UNITS]
+    init_files = [(f"opt/etc/init.d/{n}", 0o755, (SOURCE / "init.d" / n).read_bytes()) for n in INIT_SCRIPTS]
     data_entries = [
         ("opt", 0o755, None),
         ("opt/bin", 0o755, None),
         ("opt/bin/warmup-rs", 0o755, binary),
         ("opt/etc", 0o755, None),
         (ENV_FILE, 0o600, (SOURCE / "warmup-rs.env").read_bytes()),
+        ("opt/etc/init.d", 0o755, None),
+        *init_files,
         ("opt/share", 0o755, None),
         ("opt/share/warmup-rs", 0o755, None),
+        ("opt/share/warmup-rs/warmup.sh", 0o644, (SOURCE / "init.d" / "warmup.sh").read_bytes()),
         ("opt/share/warmup-rs/systemd", 0o755, None),
         *unit_files,
     ]
@@ -90,7 +97,7 @@ def main():
     control_tar = tar_gz([
         ("", 0o755, None),
         ("control", 0o644, control.encode()),
-        ("conffiles", 0o644, f"/{ENV_FILE}\n".encode()),
+        ("conffiles", 0o644, "".join(f"/{f}\n" for f in [ENV_FILE, *(path for path, _, _ in init_files)]).encode()),
         ("postinst", 0o755, (SOURCE / "postinst").read_bytes()),
         ("prerm", 0o755, (SOURCE / "prerm").read_bytes()),
         ("postrm", 0o755, (SOURCE / "postrm").read_bytes()),
