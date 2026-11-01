@@ -9,9 +9,10 @@ ENV_FILE=/opt/etc/warmup-rs.env
 PID_FILE=/opt/var/run/$NAME.pid
 LOG_FILE=/opt/var/log/$NAME.log
 BIN=/opt/bin/warmup-rs
+DATA_DIR=/opt/var/lib/warmup-rs
 
-# True when the pid file names a live warmup-rs in this script's mode. A pid
-# file left by a crash can name an unrelated process that reused the pid.
+# True when the PID file names a live warmup-rs in this script's mode. A PID
+# file left by a crash can name an unrelated process that reused the PID.
 running() {
     [ -f "$PID_FILE" ] || return 1
     pid=$(cat "$PID_FILE")
@@ -28,8 +29,11 @@ start() {
         echo "$NAME is already running."
         return 0
     fi
-    mkdir -p /opt/var/run /opt/var/log
+    mkdir -p /opt/var/run /opt/var/log "$DATA_DIR"
     (
+        # Outside CoreELEC, warmup-rs keeps its files in ./output, so start in
+        # one fixed folder. Paths set in the settings file still win.
+        cd "$DATA_DIR" || exit 1
         set -a
         # shellcheck disable=SC1090
         [ -f "$ENV_FILE" ] && . "$ENV_FILE"

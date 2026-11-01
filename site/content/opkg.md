@@ -72,7 +72,7 @@ Both scripts start turned off. To run them:
     /opt/etc/init.d/S91warmup-images start
     ```
 
-Each script also takes `stop`, `restart`, and `check`. The logs are in `/opt/var/log`. Upgrades keep your `ENABLED` setting and restart any crawl that's running.
+Each script also takes `stop`, `restart`, and `check`. The logs are in `/opt/var/log`. Unless the settings file sets other paths, the databases and images go in `/opt/var/lib/warmup-rs/output`. Upgrades keep your `ENABLED` setting and restart any crawl that's running.
 
 > [!NOTE] CoreELEC
 > On CoreELEC, Entware also runs its init scripts at boot. Leave both scripts off there, and use the systemd units, so each crawl runs once.
