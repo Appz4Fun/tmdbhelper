@@ -391,9 +391,8 @@ pub async fn run(options: Options) -> Result<()> {
             writer_handle.await??;
             anyhow::bail!("the database writer stopped");
         }
-        let free = free_space_dir.parent().map_or(u64::MAX, |p| {
-            crate::paths::available_space(p).unwrap_or(u64::MAX)
-        });
+        let free = crate::paths::available_space(crate::paths::parent_dir(&free_space_dir))
+            .unwrap_or(u64::MAX);
         if free < min_free_bytes {
             warn!(
                 "metadata crawl paused: {}MB free is under the {}MB minimum, sleeping 5 minutes",

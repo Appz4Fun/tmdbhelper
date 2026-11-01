@@ -186,8 +186,9 @@ impl TmdbClient {
                 s if s.is_server_error() => {
                     warn!("TMDB {s} for {path}, retry {}", attempt + 1);
                     tokio::time::sleep(base_backoff).await;
+                    // An outage, not a bad item, so the item goes back in the queue.
                     if attempt + 1 == RETRIES {
-                        return Err(TmdbError::Failed(path.into(), s.to_string()));
+                        return Err(TmdbError::Unavailable(path.into(), s.to_string()));
                     }
                 }
                 s => return Err(TmdbError::Failed(path.into(), s.to_string())),

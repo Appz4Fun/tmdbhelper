@@ -4,7 +4,7 @@ use crate::cache::{now_unix, WriteContext, DATALEVEL_FULL, DAY, DEFAULT_EXPIRY, 
 use crate::id::{build_episode_id, build_season_id};
 use anyhow::Result;
 use rusqlite::types::Value as Sql;
-use rusqlite::{params_from_iter, Connection};
+use rusqlite::{params, params_from_iter, Connection};
 use serde_json::Value;
 
 const ART_TYPES: [&str; 5] = ["backdrops", "posters", "stills", "logos", "profiles"];
@@ -308,16 +308,14 @@ fn unique_ids(conn: &Connection, parent: &str, v: &Value) -> Result<()> {
             Value::String(s) => text(s),
             other => Sql::Text(other.to_string()),
         };
-        fill(
-            conn,
-            "unique_id",
-            "key, parent_id",
-            &[
-                ("key", text(&key)),
-                ("value", value),
-                ("parent_id", text(parent)),
-            ],
-        )?;
+        // Like `fill`, but a real ID replaces the "None" a null one left.
+        conn.prepare_cached(
+            "INSERT INTO unique_id(key, value, parent_id) VALUES (?1, ?2, ?3)
+             ON CONFLICT(key, parent_id) DO UPDATE SET value=CASE
+                 WHEN unique_id.value IS NULL OR unique_id.value='None' THEN excluded.value
+                 ELSE unique_id.value END",
+        )?
+        .execute(params![key, value, parent])?;
     }
     Ok(())
 }
@@ -424,10 +422,12 @@ fn providers(conn: &Connection, parent: &str, v: &Value) -> Result<()> {
         let Some(availabilities) = availabilities.as_object() else {
             continue;
         };
-        for (availability, list) in availabilities {
-            if availability == "link" {
+        // The first availability stored for a provider stays, so the free and
+        // subscription ones go first, as in the add-on.
+        for availability in ["flatrate", "free", "ads", "rent", "buy"] {
+            let Some(list) = availabilities.get(availability) else {
                 continue;
-            }
+            };
             for p in array(list) {
                 fill(
                     conn,
@@ -1346,6 +1346,66 @@ pub fn write_collection(conn: &Connection, ctx: &WriteContext, c: &Value) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn schema_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(include_str!("../../schema/ItemDetails.sql"))
+            .unwrap();
+        conn
+    }
+
+    #[test]
+    fn a_real_id_replaces_the_none_a_null_one_left() {
+        let conn = schema_db();
+        let get = || -> String {
+            conn.query_row(
+                "SELECT value FROM unique_id WHERE key='imdb' AND parent_id='tv.1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        unique_ids(
+            &conn,
+            "tv.1",
+            &serde_json::json!({"external_ids": {"imdb_id": null}}),
+        )
+        .unwrap();
+        assert_eq!(get(), "None");
+        unique_ids(
+            &conn,
+            "tv.1",
+            &serde_json::json!({"external_ids": {"imdb_id": "tt1"}}),
+        )
+        .unwrap();
+        assert_eq!(get(), "tt1");
+        unique_ids(
+            &conn,
+            "tv.1",
+            &serde_json::json!({"external_ids": {"imdb_id": null}}),
+        )
+        .unwrap();
+        assert_eq!(get(), "tt1");
+    }
+
+    #[test]
+    fn subscription_availability_wins_over_buy() {
+        let conn = schema_db();
+        let v = serde_json::json!({"watch/providers": {"results": {"US": {
+            "link": "https://example.com",
+            "buy": [{"provider_id": 8, "provider_name": "Netflix"}],
+            "flatrate": [{"provider_id": 8, "provider_name": "Netflix"}],
+        }}}});
+        providers(&conn, "movie.1", &v).unwrap();
+        let availability: String = conn
+            .query_row(
+                "SELECT availability FROM provider WHERE parent_id='movie.1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(availability, "flatrate");
+    }
 
     #[test]
     fn aspect_ratio_buckets_match_tmdbhelper() {

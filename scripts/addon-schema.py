@@ -51,7 +51,7 @@ def create(conn, name, columns):
 def main():
     addon = Path(sys.argv[1])
     version, tables = addon_tables(addon, load_tabledef(addon))
-    seeds = [l for l in OUT.read_text().splitlines() if l.startswith(("INSERT INTO languages", "INSERT INTO countries"))]
+    seeds = [l for l in OUT.read_text().splitlines() if l.startswith(('INSERT INTO "languages"', 'INSERT INTO "countries"'))]
     conn = sqlite3.connect(":memory:")
     for name, columns in tables:
         create(conn, name, columns)

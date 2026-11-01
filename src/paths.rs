@@ -108,6 +108,14 @@ pub fn available_space(path: &Path) -> Option<u64> {
     fs2::available_space(path).ok()
 }
 
+/// The folder that holds `path`. A bare file name's parent is the current folder.
+pub fn parent_dir(path: &std::path::Path) -> &std::path::Path {
+    match path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p,
+        _ => std::path::Path::new("."),
+    }
+}
+
 /// Creates the parent folders of every database and the thumbnails folder.
 pub fn ensure_dirs(paths: &Paths) -> Result<()> {
     for db in [&paths.state_db, &paths.item_details_db, &paths.textures_db] {
