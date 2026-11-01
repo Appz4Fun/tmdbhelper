@@ -5,7 +5,8 @@ use anyhow::{Context, Result};
 use reqwest::StatusCode;
 use rusqlite::{Connection, OpenFlags};
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, Semaphore};
@@ -16,11 +17,13 @@ struct ArtRow {
     art_type: String,
 }
 
-struct DownloadResult {
+struct SavedImage {
     path: String,
     art_type: String,
     cached_filename: String,
-    bytes: Vec<u8>,
+    size: u64,
+    width: u32,
+    height: u32,
 }
 
 struct RegisterOnly {
@@ -82,14 +85,53 @@ fn parse_image_dimensions(data: &[u8]) -> (u32, u32) {
         .unwrap_or((0, 0))
 }
 
+static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(0);
+
+/// Saves an image under its cached name and returns its size, width, and height.
+/// Writing to a temporary name means a stopped run can't leave a truncated file
+/// that later cycles count as finished. Each save gets its own temporary name,
+/// so two rows that share an image can't overwrite each other's partial file.
+fn save_image(dir: &Path, cached_filename: &str, bytes: &[u8]) -> std::io::Result<(u64, u32, u32)> {
+    let file_path = dir.join(cached_filename);
+    if let Some(parent) = file_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let id = NEXT_TEMP_ID.fetch_add(1, Ordering::Relaxed);
+    let temp_path = file_path.with_extension(format!("{id}.part"));
+    // Every attempt has a new name, so a failed one must not leave its file behind.
+    if let Err(e) =
+        std::fs::write(&temp_path, bytes).and_then(|()| std::fs::rename(&temp_path, &file_path))
+    {
+        let _ = std::fs::remove_file(&temp_path);
+        return Err(e);
+    }
+    let (width, height) = parse_image_dimensions(bytes);
+    Ok((bytes.len() as u64, width, height))
+}
+
 pub async fn run(
     item_details_path: PathBuf,
     textures_db_path: PathBuf,
     thumbnails_dir: PathBuf,
     concurrency: usize,
+    min_free_bytes: u64,
 ) -> Result<()> {
+    tokio::task::spawn_blocking({
+        let textures_db_path = textures_db_path.clone();
+        let thumbnails_dir = thumbnails_dir.clone();
+        move || -> Result<()> {
+            let db = texture_db::TextureDb::open(&textures_db_path)?;
+            let deleted = db.purge_lower_quality(&thumbnails_dir)?;
+            if deleted > 0 {
+                info!("deleted {deleted} images below full quality");
+            }
+            Ok(())
+        }
+    })
+    .await??;
+
     let sem = Arc::new(Semaphore::new(concurrency));
-    let (tx, mut rx) = mpsc::channel::<DownloadResult>(200);
+    let (tx, mut rx) = mpsc::channel::<SavedImage>(200);
     let (reg_tx, mut reg_rx) = mpsc::channel::<RegisterOnly>(200);
 
     let client = reqwest::Client::builder()
@@ -134,23 +176,22 @@ pub async fn run(
                     registered += 1;
                 }
 
+                // With nothing waiting, save what's done so far: a batch can sit
+                // unwritten for the whole 5-minute wait between cycles otherwise.
+                if rx.is_empty() && !batch.is_empty() {
+                    if let Err(e) = db.insert_texture_batch(&batch) {
+                        error!("texture batch insert failed: {:?}", e);
+                    }
+                    batch.clear();
+                }
+
                 let dl = match rx.blocking_recv() {
                     Some(dl) => dl,
                     None => break,
                 };
 
-                let file_path = thumbnails_dir.join(&dl.cached_filename);
-                if let Some(parent) = file_path.parent() {
-                    let _ = std::fs::create_dir_all(parent);
-                }
-
-                if let Err(e) = std::fs::write(&file_path, &dl.bytes) {
-                    error!("write {} failed: {:?}", file_path.display(), e);
-                    continue;
-                }
-
-                let (w, h) = parse_image_dimensions(&dl.bytes);
-                bytes_total += dl.bytes.len() as u64;
+                bytes_total += dl.size;
+                let (w, h) = (dl.width, dl.height);
 
                 let variants = texture_hash::url_variants(&dl.path, &dl.art_type);
                 for url in &variants {
@@ -195,7 +236,24 @@ pub async fn run(
             move || -> Result<Vec<ArtRow>> {
                 let conn = Connection::open_with_flags(&p, OpenFlags::SQLITE_OPEN_READ_ONLY)
                     .with_context(|| format!("open ItemDetails.db {}", p.display()))?;
-                let mut stmt = conn.prepare("SELECT DISTINCT icon, type FROM art")?;
+                // Most popular first, so a disk limit keeps the art people will see.
+                // SVG logos are skipped because TMDBHelper only shows PNG logos.
+                let mut stmt = conn.prepare(
+                    "SELECT x.icon, x.type FROM (
+                         SELECT icon, type, parent_id FROM art
+                         WHERE icon IS NOT NULL AND extension != 'svg'
+                         UNION ALL
+                         SELECT icon, type, parent_id FROM fanart_tv WHERE icon IS NOT NULL
+                     ) x
+                     LEFT JOIN movie m ON m.id = x.parent_id
+                     LEFT JOIN tvshow t ON t.id = x.parent_id
+                     LEFT JOIN person p ON p.id = x.parent_id
+                     LEFT JOIN season s ON s.id = x.parent_id
+                     LEFT JOIN episode e ON e.id = x.parent_id
+                     LEFT JOIN tvshow st ON st.id = COALESCE(s.tvshow_id, e.tvshow_id)
+                     GROUP BY x.icon, x.type
+                     ORDER BY MAX(COALESCE(m.popularity, t.popularity, p.popularity, st.popularity, 0)) DESC",
+                )?;
                 let rows = stmt
                     .query_map([], |r| {
                         Ok(ArtRow {
@@ -220,14 +278,18 @@ pub async fn run(
             continue;
         }
 
-        const MIN_FREE_BYTES: u64 = 10 * 1024 * 1024 * 1024;
-        let free = fs2::available_space(&thumbnails_dir).unwrap_or(u64::MAX);
-        if free < MIN_FREE_BYTES {
-            info!(
-                "image cycle skipped: {}MB free < {}MB minimum, sleeping 5 minutes",
-                free / (1024 * 1024),
-                MIN_FREE_BYTES / (1024 * 1024)
-            );
+        let has_room = || {
+            let free = crate::paths::available_space(&thumbnails_dir).unwrap_or(u64::MAX);
+            if free < min_free_bytes {
+                warn!(
+                    "image downloads paused: {}MB free is under the {}MB minimum, sleeping 5 minutes",
+                    free / (1024 * 1024),
+                    min_free_bytes / (1024 * 1024)
+                );
+            }
+            free >= min_free_bytes
+        };
+        if !has_room() {
             tokio::time::sleep(Duration::from_secs(300)).await;
             continue;
         }
@@ -273,7 +335,7 @@ pub async fn run(
 
         for row in &art_rows {
             let ext = row.path.rsplit('.').next().unwrap_or("jpg");
-            let download_url = texture_hash::download_url(&row.path, &row.art_type);
+            let download_url = texture_hash::download_url(&row.path);
             let cached_filename = texture_hash::cached_filename(&download_url, ext);
 
             if existing_files.contains(&cached_filename) {
@@ -299,6 +361,7 @@ pub async fn run(
             let art_type = row.art_type.clone();
             let url = download_url.clone();
             let cf = cached_filename.clone();
+            let thumbnails_dir = thumbnails_dir.clone();
             tokio::spawn(async move {
                 let _permit = permit;
                 for attempt in 0u32..3 {
@@ -325,14 +388,29 @@ pub async fn run(
                     if status.is_success() {
                         match resp.bytes().await {
                             Ok(bytes) => {
-                                let _ = tx
-                                    .send(DownloadResult {
-                                        path,
-                                        art_type,
-                                        cached_filename: cf,
-                                        bytes: bytes.to_vec(),
-                                    })
-                                    .await;
+                                // Saving here, not in the database writer, lets a slow
+                                // network share take many files at once.
+                                let (dir, name) = (thumbnails_dir, cf.clone());
+                                let saved = tokio::task::spawn_blocking(move || {
+                                    save_image(&dir, &name, &bytes)
+                                })
+                                .await;
+                                match saved {
+                                    Ok(Ok((size, width, height))) => {
+                                        let _ = tx
+                                            .send(SavedImage {
+                                                path,
+                                                art_type,
+                                                cached_filename: cf,
+                                                size,
+                                                width,
+                                                height,
+                                            })
+                                            .await;
+                                    }
+                                    Ok(Err(e)) => error!("write {} failed: {:?}", cf, e),
+                                    Err(e) => error!("write {} failed: {:?}", cf, e),
+                                }
                             }
                             Err(e) => warn!("image read body {}: {:?}", url, e),
                         }
@@ -364,6 +442,9 @@ pub async fn run(
             });
 
             dispatched += 1;
+            if dispatched.is_multiple_of(1000) && !has_room() {
+                break;
+            }
             if dispatched.is_multiple_of(10000) {
                 info!(
                     "image dispatch progress: dispatched={} skipped={}",
@@ -395,6 +476,46 @@ pub async fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn save_image_writes_the_file_and_leaves_no_temporary_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut png = vec![
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0x0D,
+        ];
+        png.extend_from_slice(b"IHDR");
+        png.extend_from_slice(&800u32.to_be_bytes());
+        png.extend_from_slice(&600u32.to_be_bytes());
+        let saved = save_image(dir.path(), "a/a0000001.png", &png).unwrap();
+        assert_eq!(saved, (png.len() as u64, 800, 600));
+        assert_eq!(
+            std::fs::read(dir.path().join("a/a0000001.png")).unwrap(),
+            png
+        );
+        let names: Vec<_> = std::fs::read_dir(dir.path().join("a")).unwrap().collect();
+        assert_eq!(names.len(), 1);
+    }
+
+    #[test]
+    fn concurrent_saves_of_one_image_all_succeed() {
+        let dir = tempfile::tempdir().unwrap();
+        let handles: Vec<_> = (0..16)
+            .map(|_| {
+                let path = dir.path().to_path_buf();
+                std::thread::spawn(move || save_image(&path, "b/b0000002.jpg", &[7u8; 4096]))
+            })
+            .collect();
+        for handle in handles {
+            handle.join().unwrap().unwrap();
+        }
+        assert_eq!(std::fs::read_dir(dir.path().join("b")).unwrap().count(), 1);
+        assert_eq!(
+            std::fs::read(dir.path().join("b/b0000002.jpg"))
+                .unwrap()
+                .len(),
+            4096
+        );
+    }
 
     #[test]
     fn jpeg_dimensions() {

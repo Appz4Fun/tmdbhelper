@@ -1,12 +1,14 @@
+use crate::images::texture_hash::cached_filename;
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, OpenFlags};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+// Kodi leaves `imagehash` and `lasthashcheck` empty for web images, which it never rechecks.
 // Kodi's `idxTexture` and `idxSize` indexes aren't unique, so `INSERT OR IGNORE`
 // and `INSERT OR REPLACE` never dedupe. These statements check for an existing row.
 const INSERT_TEXTURE: &str = "INSERT INTO texture (url, cachedurl, imagehash, lasthashcheck)
-     SELECT ?1, ?2, '', ?3 WHERE NOT EXISTS (SELECT 1 FROM texture WHERE url=?1)";
+     SELECT ?1, ?2, '', '' WHERE NOT EXISTS (SELECT 1 FROM texture WHERE url=?1)";
 const UPDATE_SIZE: &str =
     "UPDATE sizes SET width=?2, height=?3, lastusetime=?4 WHERE idtexture=?1 AND size=1";
 const INSERT_SIZE: &str =
@@ -64,6 +66,57 @@ impl TextureDb {
             .is_ok()
     }
 
+    /// Removes images older versions downloaded below full quality, and SVG logos,
+    /// which TMDBHelper never shows. Returns the number of files it deleted. The
+    /// next image cycle downloads their originals.
+    pub fn purge_lower_quality(&self, thumbnails_dir: &Path) -> Result<usize> {
+        let mut by_file: HashMap<String, Vec<i64>> = HashMap::new();
+        let mut stale = HashSet::new();
+        {
+            let mut stmt = self
+                .conn
+                .prepare("SELECT id, url, cachedurl FROM texture")?;
+            let rows = stmt.query_map([], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                ))
+            })?;
+            for row in rows {
+                let (id, url, cached) = row?;
+                let ext = url.rsplit('.').next().unwrap_or("jpg");
+                // A file is named for the URL it came from, so this finds the
+                // files downloaded at this size, not the ones merely registered.
+                let downloaded_small =
+                    url.contains("/w1280/") && cached_filename(&url, ext) == cached;
+                if downloaded_small || ext.eq_ignore_ascii_case("svg") {
+                    stale.insert(cached.clone());
+                }
+                by_file.entry(cached).or_default().push(id);
+            }
+        }
+        let mut deleted = 0;
+        let tx = self.conn.unchecked_transaction()?;
+        {
+            let mut del_sizes = tx.prepare("DELETE FROM sizes WHERE idtexture=?1")?;
+            let mut del_texture = tx.prepare("DELETE FROM texture WHERE id=?1")?;
+            for cached in &stale {
+                for id in by_file.get(cached).into_iter().flatten() {
+                    del_sizes.execute(params![id])?;
+                    del_texture.execute(params![id])?;
+                }
+                match std::fs::remove_file(thumbnails_dir.join(cached)) {
+                    Ok(()) => deleted += 1,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(e).with_context(|| format!("delete {cached}")),
+                }
+            }
+        }
+        tx.commit()?;
+        Ok(deleted)
+    }
+
     pub fn load_all_cached_urls(&self) -> Result<HashSet<String>> {
         let mut stmt = self.conn.prepare("SELECT url FROM texture")?;
         let urls = stmt
@@ -83,7 +136,7 @@ impl TextureDb {
         let now = format_utc_now();
         self.conn
             .prepare_cached(INSERT_TEXTURE)?
-            .execute(params![url, cached_url, &now])?;
+            .execute(params![url, cached_url])?;
 
         let id: i64 = self
             .conn
@@ -114,7 +167,7 @@ impl TextureDb {
             let mut ins_size = tx.prepare_cached(INSERT_SIZE)?;
 
             for (url, cached_url, w, h) in items {
-                if ins_tex.execute(params![url, cached_url, &now])? > 0 {
+                if ins_tex.execute(params![url, cached_url])? > 0 {
                     count += 1;
                 }
                 if *w > 0 || *h > 0 {
@@ -243,6 +296,41 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM sizes", [], |r| r.get(0))
             .unwrap();
         assert_eq!(sizes, 1);
+    }
+
+    #[test]
+    fn purge_removes_only_lower_quality_and_svg_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let f = NamedTempFile::new().unwrap();
+        let db = TextureDb::open(f.path()).unwrap();
+        let small_url = "https://image.tmdb.org/t/p/w1280/poster.jpg";
+        let small = cached_filename(small_url, "jpg");
+        // A backdrop's file came from `original`, and w1280 only points at it.
+        let full_url = "https://image.tmdb.org/t/p/original/backdrop.jpg";
+        let full = cached_filename(full_url, "jpg");
+        let svg_url = "https://image.tmdb.org/t/p/original/logo.svg";
+        let svg = cached_filename(svg_url, "svg");
+        for (url, cached) in [
+            (small_url, &small),
+            ("https://image.tmdb.org/t/p/original/poster.jpg", &small),
+            (full_url, &full),
+            ("https://image.tmdb.org/t/p/w1280/backdrop.jpg", &full),
+            (svg_url, &svg),
+        ] {
+            db.insert_texture(url, cached, 10, 10).unwrap();
+            let path = dir.path().join(cached);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, b"x").unwrap();
+        }
+
+        assert_eq!(db.purge_lower_quality(dir.path()).unwrap(), 2);
+        assert!(!dir.path().join(&small).exists());
+        assert!(!dir.path().join(&svg).exists());
+        assert!(dir.path().join(&full).exists());
+        assert!(!db.is_cached(small_url));
+        assert!(!db.is_cached("https://image.tmdb.org/t/p/original/poster.jpg"));
+        assert!(db.is_cached(full_url));
+        assert!(db.is_cached("https://image.tmdb.org/t/p/w1280/backdrop.jpg"));
     }
 
     #[test]

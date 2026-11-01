@@ -32,10 +32,18 @@ Project words, such as product names, go in `.vale/styles/config/vocabularies/Wa
 
 ## Schema changes
 
-The binary embeds `schema/ItemDetails.sql`, which is a dump of `tests/fixtures/ItemDetails-empty.db`. If TMDBHelper changes its schema, update the fixture, then regenerate the dump:
+The binary embeds `schema/ItemDetails.sql`, and `SCHEMA_VERSION` in `src/cache/mod.rs` must match its version. If TMDBHelper changes its schema, rebuild both the schema and the test fixture from a checkout of the add-on:
 
 ```bash
-sqlite3 tests/fixtures/ItemDetails-empty.db .dump > schema/ItemDetails.sql
+scripts/addon-schema.py ../plugin.video.themoviedb.helper
+rm tests/fixtures/ItemDetails-empty.db
+sqlite3 tests/fixtures/ItemDetails-empty.db < schema/ItemDetails.sql
+```
+
+To check the writers, let the add-on cache some items in Kodi, crawl the same items with warmup-rs, and compare the two databases:
+
+```bash
+scripts/compare-with-addon.py output/ItemDetails.db addon/ItemDetails.db movie.550 tv.1396 tv.1396.1.1
 ```
 
 ## Releases

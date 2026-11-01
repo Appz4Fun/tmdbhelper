@@ -87,6 +87,35 @@ impl Paths {
     }
 }
 
+/// Free space on the disk that holds `path`, or `None` if the system can't say.
+#[cfg(target_os = "macos")]
+pub fn available_space(path: &Path) -> Option<u64> {
+    use std::os::unix::ffi::OsStrExt;
+    let path = std::ffi::CString::new(path.as_os_str().as_bytes()).ok()?;
+    let mut stat = std::mem::MaybeUninit::<libc::statfs>::uninit();
+    // macOS keeps `statvfs` block counts in 32 bits, so a share with over 2^32
+    // free blocks wraps around. `statfs` uses 64 bits.
+    if unsafe { libc::statfs(path.as_ptr(), stat.as_mut_ptr()) } != 0 {
+        return None;
+    }
+    let stat = unsafe { stat.assume_init() };
+    Some(stat.f_bavail * u64::from(stat.f_bsize))
+}
+
+/// Free space on the disk that holds `path`, or `None` if the system can't say.
+#[cfg(not(target_os = "macos"))]
+pub fn available_space(path: &Path) -> Option<u64> {
+    fs2::available_space(path).ok()
+}
+
+/// The folder that holds `path`. A bare file name's parent is the current folder.
+pub fn parent_dir(path: &std::path::Path) -> &std::path::Path {
+    match path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p,
+        _ => std::path::Path::new("."),
+    }
+}
+
 /// Creates the parent folders of every database and the thumbnails folder.
 pub fn ensure_dirs(paths: &Paths) -> Result<()> {
     for db in [&paths.state_db, &paths.item_details_db, &paths.textures_db] {

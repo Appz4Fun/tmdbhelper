@@ -17,6 +17,7 @@ Default paths:
 Examples:
   warmup-rs --mode=smoke
   WARMUP_TMDB_API_KEY=<key> warmup-rs
+  WARMUP_TMDB_API_KEY=<key> warmup-rs --all-ids
   warmup-rs --mode=images --concurrency=25";
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
@@ -25,6 +26,8 @@ enum Mode {
     Metadata,
     /// download artwork and register it in Textures13.db.
     Images,
+    /// fetch fanart.tv art for the movies and shows in ItemDetails.db.
+    Fanart,
     /// check that the binary runs, then exit without side effects.
     Smoke,
 }
@@ -45,9 +48,29 @@ struct Args {
     #[arg(long, env = "WARMUP_TMDB_API_KEY", hide_env_values = true)]
     tmdb_api_key: Option<String>,
 
+    /// fanart.tv API key. Required in fanart mode.
+    #[arg(long, env = "WARMUP_FANART_API_KEY", hide_env_values = true)]
+    fanart_api_key: Option<String>,
+
+    /// fanart.tv personal key, sent alongside a project's API key in fanart mode.
+    #[arg(long, env = "WARMUP_FANART_CLIENT_KEY", hide_env_values = true)]
+    fanart_client_key: Option<String>,
+
     /// Number of concurrent requests to TMDB.
-    #[arg(long, env = "WARMUP_CONCURRENCY", default_value_t = 40, value_parser = clap::value_parser!(u64).range(1..))]
+    #[arg(long, env = "WARMUP_CONCURRENCY", default_value_t = 20, value_parser = clap::value_parser!(u64).range(1..))]
     concurrency: u64,
+
+    /// The add-on's language setting. TMDBHelper ignores rows in any other language.
+    #[arg(long, env = "WARMUP_LANGUAGE", default_value = "en-US")]
+    language: String,
+
+    /// Queue every title, person, and collection from TMDB's daily ID lists in metadata mode.
+    #[arg(long, env = "WARMUP_ALL_IDS")]
+    all_ids: bool,
+
+    /// Pause when the output disk has less free space than this many GB.
+    #[arg(long, env = "WARMUP_MIN_FREE_GB", default_value_t = 10)]
+    min_free_gb: u64,
 
     /// Number of items to take from the queue per loop in metadata mode.
     #[arg(long, env = "WARMUP_BATCH_SIZE", default_value_t = 200, value_parser = clap::value_parser!(u64).range(1..))]
@@ -90,8 +113,14 @@ async fn main() -> anyhow::Result<()> {
             "metadata mode needs a TMDB API key: set --tmdb-api-key or WARMUP_TMDB_API_KEY"
         );
     }
+    if args.mode == Mode::Fanart && args.fanart_api_key.is_none() {
+        anyhow::bail!(
+            "fanart mode needs a fanart.tv API key: set --fanart-api-key or WARMUP_FANART_API_KEY"
+        );
+    }
     let concurrency = args.concurrency as usize;
     let batch_size = args.batch_size as usize;
+    let min_free_bytes = args.min_free_gb * 1024 * 1024 * 1024;
 
     let platform = Platform::detect();
     let defaults = Paths::defaults(platform, &args.output_dir);
@@ -129,13 +158,16 @@ async fn main() -> anyhow::Result<()> {
                 paths.state_db.display(),
                 paths.item_details_db.display()
             );
-            warmup_rs::worker::run(
-                paths.state_db,
-                paths.item_details_db,
+            warmup_rs::worker::run(warmup_rs::worker::Options {
+                state_path: paths.state_db,
+                item_details_path: paths.item_details_db,
                 api_key,
+                language: args.language,
                 concurrency,
                 batch_size,
-            )
+                all_ids: args.all_ids,
+                min_free_bytes,
+            })
             .await?;
         }
         Mode::Images => {
@@ -150,7 +182,20 @@ async fn main() -> anyhow::Result<()> {
                 paths.textures_db,
                 paths.thumbnails_dir,
                 concurrency,
+                min_free_bytes,
             )
+            .await?;
+        }
+        Mode::Fanart => {
+            info!("fanart mode: target={}", paths.item_details_db.display());
+            warmup_rs::fanart::run(warmup_rs::fanart::Options {
+                item_details_path: paths.item_details_db,
+                api_key: args.fanart_api_key.unwrap_or_default(),
+                client_key: args.fanart_client_key,
+                language: args.language,
+                concurrency,
+                min_free_bytes,
+            })
             .await?;
         }
         Mode::Smoke => {
