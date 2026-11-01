@@ -10,13 +10,18 @@ PID_FILE=/opt/var/run/$NAME.pid
 LOG_FILE=/opt/var/log/$NAME.log
 BIN=/opt/bin/warmup-rs
 
+# True when the pid file names a live warmup-rs in this script's mode. A pid
+# file left by a crash can name an unrelated process that reused the pid.
 running() {
-    [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null
+    [ -f "$PID_FILE" ] || return 1
+    pid=$(cat "$PID_FILE")
+    [ -r "/proc/$pid/cmdline" ] || return 1
+    tr '\000' ' ' <"/proc/$pid/cmdline" | grep -q "warmup-rs --mode=$MODE"
 }
 
 start() {
     if [ "$ENABLED" != yes ]; then
-        echo "$NAME is disabled. Set ENABLED=yes in $0 to start it."
+        echo "$NAME is off. Set ENABLED=yes in $0 to start it."
         return 0
     fi
     if running; then
@@ -54,11 +59,11 @@ stop() {
     kill "$pid"
     # Give the crawl 30 seconds to finish its writes, like the systemd units.
     i=0
-    while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 30 ]; do
+    while running && [ "$i" -lt 30 ]; do
         sleep 1
         i=$((i + 1))
     done
-    kill -0 "$pid" 2>/dev/null && kill -9 "$pid"
+    running && kill -9 "$pid"
     rm -f "$PID_FILE"
     echo "Stopped $NAME."
 }

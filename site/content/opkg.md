@@ -61,7 +61,7 @@ On an Entware system without systemd, the package doesn't install the units. Two
 | `S90warmup-rs` | The metadata crawl. |
 | `S91warmup-images` | The image crawl. |
 
-Both scripts start disabled. To run them:
+Both scripts start turned off. To run them:
 
 1. Add your [TMDB API key](quick-start.md#get-a-tmdb-api-key) to `/opt/etc/warmup-rs.env`.
 2. In each script, change `ENABLED=no` to `ENABLED=yes`. Entware then starts the crawls at boot.
@@ -75,7 +75,7 @@ Both scripts start disabled. To run them:
 Each script also takes `stop`, `restart`, and `check`. The logs are in `/opt/var/log`. Upgrades keep your `ENABLED` setting and restart any crawl that's running.
 
 > [!NOTE] CoreELEC
-> On CoreELEC, Entware also runs its init scripts at boot. Leave both scripts disabled there, and use the systemd units, so each crawl runs once.
+> On CoreELEC, Entware also runs its init scripts at boot. Leave both scripts off there, and use the systemd units, so each crawl runs once.
 
 ## Change the settings
 
