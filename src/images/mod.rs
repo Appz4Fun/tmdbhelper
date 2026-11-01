@@ -267,7 +267,7 @@ pub async fn run(
         }
 
         let has_room = || {
-            let free = fs2::available_space(&thumbnails_dir).unwrap_or(u64::MAX);
+            let free = crate::paths::available_space(&thumbnails_dir).unwrap_or(u64::MAX);
             if free < min_free_bytes {
                 warn!(
                     "image downloads paused: {}MB free is under the {}MB minimum, sleeping 5 minutes",

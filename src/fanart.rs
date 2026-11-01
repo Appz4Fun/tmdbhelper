@@ -145,9 +145,9 @@ pub async fn run(options: Options) -> Result<()> {
     let start = std::time::Instant::now();
 
     loop {
-        let free = item_details_path
-            .parent()
-            .map_or(u64::MAX, |p| fs2::available_space(p).unwrap_or(u64::MAX));
+        let free = item_details_path.parent().map_or(u64::MAX, |p| {
+            crate::paths::available_space(p).unwrap_or(u64::MAX)
+        });
         if free < min_free_bytes {
             warn!(
                 "fanart crawl paused: {}MB free is under the {}MB minimum, sleeping 5 minutes",

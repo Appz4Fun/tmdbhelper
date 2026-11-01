@@ -105,4 +105,6 @@ Both databases use a write-ahead log, so copy them only after you merge it:
 ```bash
 sqlite3 output/ItemDetails.db 'PRAGMA wal_checkpoint(TRUNCATE);'
 sqlite3 output/Textures13.db 'PRAGMA wal_checkpoint(TRUNCATE);'
-``` To keep the caches warm on the device itself, see [Run it on a Kodi box](kodi-box.md).
+```
+
+To keep the caches warm on the device itself, see [Run it on a Kodi box](kodi-box.md).
