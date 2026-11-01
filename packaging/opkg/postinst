@@ -1,0 +1,27 @@
+#!/bin/sh
+# Installs the systemd units on CoreELEC, where they live under /storage.
+# An upgrade restarts any service that's running. A new install starts nothing,
+# because the services need an API key first.
+SOURCE=/opt/share/warmup-rs/systemd
+TARGET=/storage/.config/system.d
+UNITS="tmdbhelper-warmup-rs.service tmdbhelper-warmup-images.service"
+
+chmod 600 /opt/etc/warmup-rs.env
+
+if [ -d /storage/.config ] && command -v systemctl >/dev/null 2>&1; then
+    mkdir -p "$TARGET"
+    for unit in $UNITS; do
+        cp "$SOURCE/$unit" "$TARGET/$unit"
+    done
+    systemctl daemon-reload
+    # shellcheck disable=SC2086
+    systemctl try-restart $UNITS
+    if [ "$PKG_UPGRADE" != 1 ]; then
+        echo "warmup-rs: installed the systemd units in $TARGET."
+        echo "warmup-rs: to start, add your TMDB API key to /opt/etc/warmup-rs.env, then run:"
+        echo "warmup-rs: systemctl enable --now tmdbhelper-warmup-rs tmdbhelper-warmup-images"
+    fi
+else
+    echo "warmup-rs: this system has no CoreELEC systemd folder, so the units stay in $SOURCE."
+fi
+exit 0

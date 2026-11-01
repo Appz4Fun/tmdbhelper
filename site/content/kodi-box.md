@@ -5,6 +5,9 @@ eyebrow = "Guides"
 lede = "On a Kodi appliance, warmup-rs keeps its original defaults and writes into the caches that Kodi reads. It runs at low priority next to Kodi."
 +++
 
+> [!TIP] Install with opkg
+> On CoreELEC with Entware, the [Entware package](opkg.md) installs the binary and both services for you. This page covers the manual install.
+
 ## Before you start
 
 - **TMDBHelper**, installed and run once, so `ItemDetails.db` exists. On a Kodi appliance, warmup-rs writes into the add-on's schema and doesn't create the database.

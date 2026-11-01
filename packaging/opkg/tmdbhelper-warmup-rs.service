@@ -1,0 +1,22 @@
+[Unit]
+Description=TMDBHelper metadata cache warmer
+After=kodi.service entware.service network-online.target
+Wants=network-online.target
+RequiresMountsFor=/var/media/CACHE_DRIVE
+
+[Service]
+Type=simple
+ExecStart=/opt/bin/warmup-rs --mode=metadata
+Environment=RUST_LOG=warmup_rs=info,warn
+EnvironmentFile=-/opt/etc/warmup-rs.env
+Restart=on-failure
+RestartSec=60
+Nice=10
+IOSchedulingClass=2
+IOSchedulingPriority=7
+KillSignal=SIGTERM
+TimeoutStopSec=30
+SyslogIdentifier=tmdbhelper-warmup-rs
+
+[Install]
+WantedBy=multi-user.target

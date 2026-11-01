@@ -22,10 +22,11 @@ All text that warmup-rs or this repository writes follows the [Google developer 
 - `warmup-rs --help`
 - the `just --list` recipe descriptions
 - log and error messages in `src/`
+- comments and messages in `packaging/`
 
 Text that comes from TMDB, such as a plot or a biography, isn't checked.
 
-`just vale-lint` collects the help text, the recipe list, and the source strings into `target/vale`, then runs Vale on them and on the docs. It fails on errors and shows warnings. `just vale-fmt` applies the fixes that Vale can make by itself, such as word substitutions, and leaves the rest for you.
+`just vale-lint` collects the help text, the recipe list, the source strings, and the text in `packaging/` into `target/vale`, then runs Vale on them and on the docs. It fails on errors and shows warnings. `just vale-fmt` applies the fixes that Vale can make by itself, such as word substitutions, and leaves the rest for you.
 
 Project words, such as product names, go in `.vale/styles/config/vocabularies/WarmupRs/accept.txt`.
 
@@ -44,6 +45,10 @@ To check the writers, let the add-on cache some items in Kodi, crawl the same it
 ```bash
 scripts/compare-with-addon.py output/ItemDetails.db addon/ItemDetails.db movie.550 tv.1396 tv.1396.1.1
 ```
+
+## Releases
+
+The `docs` workflow rebuilds the opkg feed from `main`. opkg upgrades only to a newer version, so raise `version` in `Cargo.toml` when a change should reach installed packages.
 
 ## The site
 

@@ -26,6 +26,7 @@ lede = "Run just with no arguments to list the recipes. Recipes that take argume
 | `just build-release-x86` | Builds a static `x86_64-unknown-linux-musl` binary with cross. |
 | `just build-release-arm` | Builds a static `aarch64-unknown-linux-musl` binary with cross. |
 | `just build-release-win` | Builds an `x86_64-pc-windows-gnu` binary with cross. Beta. |
+| `just build-opkg` | Builds an Entware opkg package and feed in `target/opkg`. See [Entware package](opkg.md). |
 | `just install` | Installs the release binary into `~/.cargo/bin`. |
 
 ## Docker

@@ -37,3 +37,5 @@ toolchain
 passthrough
 [Ff]anart
 zsh
+opkg
+Entware

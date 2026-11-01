@@ -18,7 +18,7 @@ pages = ["index", "how-it-works"]
 
 [[nav]]
 title = "Get started"
-pages = ["install", "quick-start", "docker"]
+pages = ["install", "quick-start", "docker", "opkg"]
 
 [[nav]]
 title = "Guides"

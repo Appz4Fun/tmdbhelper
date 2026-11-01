@@ -9,3 +9,8 @@
 - [ ] Check the free-space check and the default `./output` paths on Windows.
 - [ ] Decide whether to ship an MSVC build, which needs a Windows runner or
       `cargo-xwin`.
+
+## Kodi add-on
+
+- [ ] Consider a full Kodi add-on, which would install from Kodi's own interface,
+      for people who don't use Entware.

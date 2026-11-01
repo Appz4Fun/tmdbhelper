@@ -45,6 +45,14 @@ just build-release-win   # x86_64-pc-windows-gnu, beta
 
 The Windows build is a beta. It cross-compiles with MinGW through cross, and it isn't tested on Windows yet. See `TODO.md` in the repository for its status.
 
+## Build the Entware package
+
+```bash
+just build-opkg
+```
+
+The output is `target/opkg/aarch64-k3.10`, which holds the package and the `Packages` indexes. See [Entware package](opkg.md) to install it.
+
 ## Build a Docker image
 
 ```bash
