@@ -22,6 +22,14 @@ if [ -d /storage/.config ] && command -v systemctl >/dev/null 2>&1; then
         echo "warmup-rs: systemctl enable --now tmdbhelper-warmup-rs tmdbhelper-warmup-images"
     fi
 else
-    echo "warmup-rs: this system has no CoreELEC systemd folder, so the units stay in $SOURCE."
+    if [ "$PKG_UPGRADE" = 1 ]; then
+        for script in /opt/etc/init.d/S90warmup-rs /opt/etc/init.d/S91warmup-images; do
+            "$script" check >/dev/null 2>&1 && "$script" restart
+        done
+    else
+        echo "warmup-rs: this system has no systemd, so use the Entware init scripts."
+        echo "warmup-rs: add your TMDB API key to /opt/etc/warmup-rs.env, set ENABLED=yes in"
+        echo "warmup-rs: /opt/etc/init.d/S90warmup-rs and S91warmup-images, then start them."
+    fi
 fi
 exit 0
