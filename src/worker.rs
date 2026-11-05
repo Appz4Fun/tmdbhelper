@@ -407,6 +407,21 @@ pub async fn run(options: Options) -> Result<()> {
     };
 
     if all_ids {
+        // Queue the popular seeds first, at depth 0, so the crawl still starts
+        // with them instead of waiting for the whole catalogue.
+        match seed::fetch_seeds(&client).await {
+            Ok(seeds) => {
+                for s in &seeds {
+                    state.enqueue_child(s.tmdb_id, s.tmdb_type, 0, s.popularity)?;
+                }
+            }
+            Err(e) => {
+                if let Some(e) = e.downcast_ref::<TmdbError>() {
+                    exit_on_bad_key(e);
+                }
+                warn!("seeder failed: {e:#}");
+            }
+        }
         if let Err(e) = seed_exports(&mut state).await {
             warn!("TMDB's ID lists are unavailable: {e:#}");
         }

@@ -4,6 +4,15 @@ use rusqlite::{params, Connection, OpenFlags};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+const TMDB_CDN: &str = "https://image.tmdb.org/t/p/";
+
+/// The w1280 version of a TMDB image URL, whatever size the URL names.
+fn w1280_url(url: &str) -> Option<String> {
+    let rest = url.strip_prefix(TMDB_CDN)?;
+    let (_size, path) = rest.split_once('/')?;
+    Some(format!("{TMDB_CDN}w1280/{path}"))
+}
+
 // Kodi leaves `imagehash` and `lasthashcheck` empty for web images, which it never rechecks.
 // Kodi's `idxTexture` and `idxSize` indexes aren't unique, so `INSERT OR IGNORE`
 // and `INSERT OR REPLACE` never dedupe. These statements check for an existing row.
@@ -84,9 +93,11 @@ impl TextureDb {
                 let (id, url, cached) = row?;
                 let ext = url.rsplit('.').next().unwrap_or("jpg");
                 // A file is named for the URL it came from, so this finds the
-                // files downloaded at this size, not the ones merely registered.
+                // files downloaded at w1280, not the ones merely registered.
+                // Older versions downloaded posters, profiles, and logos at w1280
+                // without registering that URL, so build it from any variant.
                 let downloaded_small =
-                    url.contains("/w1280/") && cached_filename(&url, ext) == cached;
+                    w1280_url(&url).is_some_and(|small| cached_filename(&small, ext) == cached);
                 if downloaded_small || ext.eq_ignore_ascii_case("svg") {
                     stale.insert(cached.clone());
                 }
@@ -328,6 +339,26 @@ mod tests {
         assert!(!db.is_cached("https://image.tmdb.org/t/p/original/poster.jpg"));
         assert!(db.is_cached(full_url));
         assert!(db.is_cached("https://image.tmdb.org/t/p/w1280/backdrop.jpg"));
+    }
+
+    #[test]
+    fn purge_finds_a_w1280_download_registered_only_under_other_sizes() {
+        let dir = tempfile::tempdir().unwrap();
+        let f = NamedTempFile::new().unwrap();
+        let db = TextureDb::open(f.path()).unwrap();
+        let small = cached_filename("https://image.tmdb.org/t/p/w1280/profile.jpg", "jpg");
+        for url in [
+            "https://image.tmdb.org/t/p/original/profile.jpg",
+            "https://image.tmdb.org/t/p/w780/profile.jpg",
+        ] {
+            db.insert_texture(url, &small, 10, 10).unwrap();
+        }
+        let path = dir.path().join(&small);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, b"x").unwrap();
+
+        assert_eq!(db.purge_lower_quality(dir.path()).unwrap(), 1);
+        assert!(!db.is_cached("https://image.tmdb.org/t/p/original/profile.jpg"));
     }
 
     #[test]
