@@ -291,7 +291,8 @@ fn customs(conn: &Connection, parent: &str, v: &Value) -> Result<()> {
     Ok(())
 }
 
-/// `get_unique_ids`: the add-on keeps every external ID, with "None" for a null one.
+/// `get_unique_ids`: the add-on keeps every external ID, with NULL for a null one.
+/// Add-on versions before 6.20.8 stored the text "None" instead.
 fn unique_ids(conn: &Connection, parent: &str, v: &Value) -> Result<()> {
     let Some(ids) = v["external_ids"].as_object() else {
         return Ok(());
@@ -303,12 +304,12 @@ fn unique_ids(conn: &Connection, parent: &str, v: &Value) -> Result<()> {
             key.replace("_id", "")
         };
         let value = match value {
-            Value::Null => text("None"),
+            Value::Null => Sql::Null,
             Value::String(s) if s.is_empty() => Sql::Null,
             Value::String(s) => text(s),
             other => Sql::Text(other.to_string()),
         };
-        // Like `fill`, but a real ID replaces the "None" a null one left.
+        // Like `fill`, but a real ID also replaces the "None" an older build left.
         conn.prepare_cached(
             "INSERT INTO unique_id(key, value, parent_id) VALUES (?1, ?2, ?3)
              ON CONFLICT(key, parent_id) DO UPDATE SET value=CASE
@@ -1394,9 +1395,9 @@ mod tests {
     }
 
     #[test]
-    fn a_real_id_replaces_the_none_a_null_one_left() {
+    fn a_null_id_is_stored_as_null_and_a_real_id_replaces_it() {
         let conn = schema_db();
-        let get = || -> String {
+        let get = || -> Option<String> {
             conn.query_row(
                 "SELECT value FROM unique_id WHERE key='imdb' AND parent_id='tv.1'",
                 [],
@@ -1404,27 +1405,44 @@ mod tests {
             )
             .unwrap()
         };
-        unique_ids(
-            &conn,
-            "tv.1",
-            &serde_json::json!({"external_ids": {"imdb_id": null}}),
+        let write = |imdb: serde_json::Value| {
+            unique_ids(
+                &conn,
+                "tv.1",
+                &serde_json::json!({"external_ids": {"imdb_id": imdb}}),
+            )
+            .unwrap()
+        };
+        write(serde_json::Value::Null);
+        assert_eq!(get(), None);
+        write(serde_json::json!("tt1"));
+        assert_eq!(get().as_deref(), Some("tt1"));
+        write(serde_json::Value::Null);
+        assert_eq!(get().as_deref(), Some("tt1"));
+    }
+
+    #[test]
+    fn a_real_id_replaces_the_none_an_older_build_left() {
+        let conn = schema_db();
+        conn.execute(
+            "INSERT INTO unique_id(key, value, parent_id) VALUES ('imdb', 'None', 'tv.1')",
+            [],
         )
         .unwrap();
-        assert_eq!(get(), "None");
         unique_ids(
             &conn,
             "tv.1",
             &serde_json::json!({"external_ids": {"imdb_id": "tt1"}}),
         )
         .unwrap();
-        assert_eq!(get(), "tt1");
-        unique_ids(
-            &conn,
-            "tv.1",
-            &serde_json::json!({"external_ids": {"imdb_id": null}}),
-        )
-        .unwrap();
-        assert_eq!(get(), "tt1");
+        let value: String = conn
+            .query_row(
+                "SELECT value FROM unique_id WHERE key='imdb' AND parent_id='tv.1'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(value, "tt1");
     }
 
     #[test]

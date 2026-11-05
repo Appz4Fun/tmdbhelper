@@ -3,7 +3,7 @@
 
 Usage: scripts/addon-schema.py <plugin.video.themoviedb.helper checkout>
 """
-import importlib.util
+import ast
 import re
 import sqlite3
 import sys
@@ -15,11 +15,13 @@ LIB = "resources/tmdbhelper/lib/items/database"
 
 
 def load_tabledef(addon):
-    path = addon / LIB / "tabledef.py"
-    spec = importlib.util.spec_from_file_location("tabledef", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    """Reads the column dictionaries without running the add-on's code."""
+    tree = ast.parse((addon / LIB / "tabledef.py").read_text())
+    return {
+        node.targets[0].id: ast.literal_eval(node.value)
+        for node in tree.body
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+    }
 
 
 def addon_tables(addon, tabledef):
@@ -29,7 +31,7 @@ def addon_tables(addon, tabledef):
     aliases = dict(re.findall(r"(\w+_columns) = (\w+_COLUMNS)", source))
     body = source[source.index("def database_tables") :]
     tables = re.findall(r"'(\w+)': self\.(\w+_columns)", body)
-    return version, [(name, getattr(tabledef, aliases[attr])) for name, attr in tables]
+    return version, [(name, tabledef[aliases[attr]]) for name, attr in tables]
 
 
 def create(conn, name, columns):
