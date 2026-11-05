@@ -93,3 +93,20 @@ fn a_closer_path_raises_a_queued_item() {
     s.enqueue_child(2, TmdbType::Movie, 0, 5.0).unwrap();
     assert_eq!(s.pop_batch(1).unwrap()[0].tmdb_id, 2);
 }
+
+#[test]
+fn requeue_items_brings_back_only_visited_items() {
+    let (_dir, mut s) = state();
+    s.enqueue_child(550, TmdbType::Movie, 0, 100.0).unwrap();
+    s.pop_batch(10).unwrap();
+    s.visit_and_enqueue_multi(&[(550, TmdbType::Movie, &[])])
+        .unwrap();
+    assert_eq!(s.queue_size().unwrap(), 0);
+
+    let requeued = s
+        .requeue_items(&[(550, TmdbType::Movie), (680, TmdbType::Movie)])
+        .unwrap();
+    assert_eq!(requeued, 1, "680 was never visited");
+    assert_eq!(s.queue_size().unwrap(), 1);
+    assert_eq!(s.visited_count().unwrap(), 0);
+}

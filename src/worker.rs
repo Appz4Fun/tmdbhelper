@@ -1,6 +1,6 @@
 use crate::api::{TmdbClient, TmdbError};
 use crate::cache::{mapper, now_unix, open_writer, WriteContext};
-use crate::id::{pack_episode_key, unpack_episode_key, TmdbType};
+use crate::id::{pack_episode_key, parse_item_id, unpack_episode_key, TmdbType};
 use crate::seed;
 use crate::state::{Child, QueueItem, StateDb};
 use anyhow::Result;
@@ -25,6 +25,25 @@ pub struct Options {
     pub batch_size: usize,
     pub all_ids: bool,
     pub min_free_bytes: u64,
+}
+
+/// The items whose cache entry has expired. Ongoing shows, and their seasons
+/// and episodes, expire after 7 days, so the 30-day sweep alone misses them.
+fn expired_items(item_details_path: &std::path::Path) -> Result<Vec<(i64, TmdbType)>> {
+    let conn = Connection::open_with_flags(
+        item_details_path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?;
+    conn.busy_timeout(Duration::from_secs(120))?;
+    let mut stmt = conn.prepare("SELECT id FROM baseitem WHERE expiry < ?1")?;
+    let ids = stmt.query_map([now_unix()], |r| r.get::<_, String>(0))?;
+    let mut items = Vec::new();
+    for id in ids {
+        if let Some(item) = parse_item_id(&id?) {
+            items.push(item);
+        }
+    }
+    Ok(items)
 }
 
 /// One response, with the episode groups a show fetches alongside it.
@@ -332,7 +351,7 @@ pub async fn run(options: Options) -> Result<()> {
         info!("returned {released} items from the last run to the queue");
     }
 
-    let free_space_dir = item_details_path.clone();
+    let details_path = item_details_path.clone();
     let writer_handle = {
         let state_path = state_path.clone();
         tokio::task::spawn_blocking(move || -> Result<()> {
@@ -391,7 +410,7 @@ pub async fn run(options: Options) -> Result<()> {
             writer_handle.await??;
             anyhow::bail!("the database writer stopped");
         }
-        let free = crate::paths::available_space(crate::paths::parent_dir(&free_space_dir))
+        let free = crate::paths::available_space(crate::paths::parent_dir(&details_path))
             .unwrap_or(u64::MAX);
         if free < min_free_bytes {
             warn!(
@@ -424,6 +443,13 @@ pub async fn run(options: Options) -> Result<()> {
 
             let requeued = state.requeue_expired(30)?;
             info!("requeued {} expired items", requeued);
+            match expired_items(&details_path) {
+                Ok(items) => {
+                    let requeued = state.requeue_items(&items)?;
+                    info!("requeued {requeued} items whose cache expired early");
+                }
+                Err(e) => warn!("can't read expired items: {e:#}"),
+            }
 
             for s in &seeds {
                 state.enqueue_child(s.tmdb_id, s.tmdb_type, 0, s.popularity)?;

@@ -81,9 +81,50 @@ pub fn unpack_episode_key(key: i64) -> (i64, i64, i64) {
     )
 }
 
+/// Reverses the `build_*_id` functions, returning the queue key and type.
+/// Returns `None` for IDs the crawl doesn't queue, such as episode groups.
+pub fn parse_item_id(id: &str) -> Option<(i64, TmdbType)> {
+    let mut parts = id.split('.');
+    let prefix = parts.next()?;
+    let numbers = parts
+        .map(|p| p.parse::<i64>().ok())
+        .collect::<Option<Vec<i64>>>()?;
+    Some(match (prefix, numbers.as_slice()) {
+        ("movie", [id]) => (*id, TmdbType::Movie),
+        ("person", [id]) => (*id, TmdbType::Person),
+        ("collection", [id]) => (*id, TmdbType::Collection),
+        ("tv", [id]) => (*id, TmdbType::Tv),
+        ("tv", [id, season]) => (pack_episode_key(*id, *season, 0), TmdbType::Season),
+        ("tv", [id, season, episode]) => {
+            (pack_episode_key(*id, *season, *episode), TmdbType::Episode)
+        }
+        _ => return None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn item_ids_parse_back_to_queue_keys() {
+        assert_eq!(parse_item_id("movie.550"), Some((550, TmdbType::Movie)));
+        assert_eq!(parse_item_id("tv.1396"), Some((1396, TmdbType::Tv)));
+        assert_eq!(
+            parse_item_id("tv.1396.2"),
+            Some((pack_episode_key(1396, 2, 0), TmdbType::Season))
+        );
+        assert_eq!(
+            parse_item_id("tv.1396.2.3"),
+            Some((pack_episode_key(1396, 2, 3), TmdbType::Episode))
+        );
+        assert_eq!(
+            parse_item_id("collection.10"),
+            Some((10, TmdbType::Collection))
+        );
+        assert_eq!(parse_item_id("episode_group.5b11"), None);
+        assert_eq!(parse_item_id("tv.x"), None);
+    }
 
     #[test]
     fn id_format_matches_observed_tmdbhelper_strings() {

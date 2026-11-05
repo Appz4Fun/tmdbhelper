@@ -257,6 +257,32 @@ impl StateDb {
         Ok(count as i64)
     }
 
+    /// Puts visited items back in the queue, such as items whose cache expires
+    /// before the 30-day sweep in `requeue_expired`. It skips items that were
+    /// never visited, failed, or are already queued.
+    pub fn requeue_items(&mut self, items: &[(i64, TmdbType)]) -> Result<i64> {
+        let now = now();
+        let tx = self.conn.transaction()?;
+        let mut count = 0;
+        {
+            let mut insert = tx.prepare_cached(
+                "INSERT OR IGNORE INTO queue (tmdb_id, tmdb_type, depth, popularity, enqueued_at)
+                 SELECT ?1, ?2, 2, 0.0, ?3 WHERE EXISTS
+                     (SELECT 1 FROM visited WHERE tmdb_id=?1 AND tmdb_type=?2 AND result='ok')",
+            )?;
+            let mut forget = tx.prepare_cached(
+                "DELETE FROM visited WHERE tmdb_id=?1 AND tmdb_type=?2 AND result='ok'",
+            )?;
+            for (tmdb_id, tmdb_type) in items {
+                let t = type_to_str(*tmdb_type);
+                count += insert.execute(params![tmdb_id, t, now])?;
+                forget.execute(params![tmdb_id, t])?;
+            }
+        }
+        tx.commit()?;
+        Ok(count as i64)
+    }
+
     pub fn queue_size(&self) -> Result<i64> {
         Ok(self
             .conn
