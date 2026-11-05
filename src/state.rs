@@ -65,10 +65,9 @@ impl StateDb {
             OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
         )
         .with_context(|| format!("open state {}", path.display()))?;
+        crate::cache::durable_wal(&conn)?;
         conn.execute_batch(
-            "PRAGMA journal_mode=WAL;
-             PRAGMA synchronous=OFF;
-             PRAGMA busy_timeout=120000;
+            "PRAGMA busy_timeout=120000;
              PRAGMA cache_size=-65536;",
         )?;
         conn.execute_batch(

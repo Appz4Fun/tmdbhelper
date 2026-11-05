@@ -26,11 +26,8 @@ impl TextureDb {
             OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_CREATE,
         )
         .with_context(|| format!("open textures db {}", path.display()))?;
-        conn.execute_batch(
-            "PRAGMA journal_mode=WAL;
-             PRAGMA synchronous=OFF;
-             PRAGMA busy_timeout=30000;",
-        )?;
+        crate::cache::durable_wal(&conn)?;
+        conn.execute_batch("PRAGMA busy_timeout=30000;")?;
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS version (
                 idVersion INTEGER,

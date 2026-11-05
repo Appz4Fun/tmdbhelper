@@ -38,7 +38,7 @@ Both real modes are restart-safe. Metadata mode resumes from its queue in `state
 
 ## SQLite settings
 
-Both writers open SQLite in WAL mode with `synchronous=OFF` and a long busy timeout, so warmup-rs can write while Kodi reads. The metadata writer leaves `foreign_keys` off, so a refresh can't cascade into child rows, and creates each parent before its children. It also turns on a large page cache and memory-mapped I/O, and runs a passive WAL checkpoint after each batch.
+Both writers open SQLite in WAL mode with a long busy timeout, so warmup-rs can write while Kodi reads. They use `synchronous=NORMAL`, and `fullfsync` on macOS, so a crash or forced restart can lose the last few writes but can't corrupt a database. The metadata writer leaves `foreign_keys` off, so a refresh can't cascade into child rows, and creates each parent before its children. It also turns on a large page cache and memory-mapped I/O, and runs a passive WAL checkpoint after each batch.
 
 ## Matching TMDBHelper
 

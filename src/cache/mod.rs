@@ -30,10 +30,9 @@ pub fn open_writer(path: &Path) -> Result<Connection> {
     // busy_timeout=30s tolerates Kodi's periodic database vacuum cycles
     // (observed up to 60s on the live box). The writers create parents before
     // children, and leaving foreign keys off stops a refresh cascading into them.
+    durable_wal(&conn)?;
     conn.execute_batch(
-        "PRAGMA journal_mode=WAL;
-         PRAGMA synchronous=OFF;
-         PRAGMA busy_timeout=120000;
+        "PRAGMA busy_timeout=120000;
          PRAGMA foreign_keys=OFF;
          PRAGMA cache_size=-262144;
          PRAGMA mmap_size=268435456;
@@ -61,4 +60,40 @@ pub fn now_unix() -> i64 {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs() as i64
+}
+
+/// WAL with `synchronous=NORMAL`: a crash or forced restart can lose the last
+/// few transactions, but it can't corrupt the database, which
+/// `synchronous=OFF` could. On macOS a plain fsync leaves data in the drive's
+/// cache, so every sync uses `F_FULLFSYNC` there. Other systems ignore both
+/// `fullfsync` settings.
+pub fn durable_wal(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "PRAGMA journal_mode=WAL;
+         PRAGMA synchronous=NORMAL;
+         PRAGMA fullfsync=ON;
+         PRAGMA checkpoint_fullfsync=ON;",
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn durable_wal_never_runs_with_synchronous_off() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = rusqlite::Connection::open(dir.path().join("t.db")).unwrap();
+        super::durable_wal(&conn).unwrap();
+        let mode: String = conn
+            .query_row("PRAGMA journal_mode", [], |r| r.get(0))
+            .unwrap();
+        let sync: i64 = conn
+            .query_row("PRAGMA synchronous", [], |r| r.get(0))
+            .unwrap();
+        let checkpoint_fullfsync: i64 = conn
+            .query_row("PRAGMA checkpoint_fullfsync", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(mode, "wal");
+        assert_eq!(sync, 1, "synchronous should be NORMAL");
+        assert_eq!(checkpoint_fullfsync, 1);
+    }
 }
