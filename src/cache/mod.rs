@@ -12,7 +12,10 @@ pub const DEFAULT_EXPIRY: i64 = 30 * DAY;
 pub const SHORTER_EXPIRY: i64 = 7 * DAY;
 /// The `ItemDetails.db` version from the add-on's `database.py`. The add-on drops
 /// every table in a database with an older non-zero version, so this must match.
-pub const SCHEMA_VERSION: i64 = 50;
+pub const SCHEMA_VERSION: i64 = 51;
+/// Older versions this build upgrades in place. Version 51 kept the version 50
+/// tables, so only the version number changes.
+const UPGRADABLE_VERSIONS: &[i64] = &[50];
 
 /// What every writer needs besides the TMDB response.
 pub struct WriteContext {
@@ -41,7 +44,11 @@ pub fn open_writer(path: &Path) -> Result<Connection> {
     // The writers use about 60 statements per item, and SQLite recompiles any
     // that fall out of the cache, which is the slowest part of a write.
     conn.set_prepared_statement_cache_capacity(256);
-    let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+    let mut version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+    if UPGRADABLE_VERSIONS.contains(&version) {
+        conn.execute_batch(&format!("PRAGMA user_version={SCHEMA_VERSION};"))?;
+        version = SCHEMA_VERSION;
+    }
     if version != SCHEMA_VERSION {
         anyhow::bail!(
             "{} has schema version {version}, but this build writes version {SCHEMA_VERSION}. Delete it and state.db to rebuild them",
@@ -78,6 +85,32 @@ pub fn durable_wal(conn: &Connection) -> rusqlite::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn open_writer_upgrades_a_version_50_database() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("ItemDetails.db");
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(include_str!("../../schema/ItemDetails.sql"))
+            .unwrap();
+        conn.execute_batch("PRAGMA user_version=50;").unwrap();
+        drop(conn);
+        let conn = super::open_writer(&path).unwrap();
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, super::SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn open_writer_refuses_an_unknown_version() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("ItemDetails.db");
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch("PRAGMA user_version=49;").unwrap();
+        drop(conn);
+        assert!(super::open_writer(&path).is_err());
+    }
+
     #[test]
     fn durable_wal_never_runs_with_synchronous_off() {
         let dir = tempfile::tempdir().unwrap();

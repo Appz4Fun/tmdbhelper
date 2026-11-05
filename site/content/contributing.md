@@ -40,6 +40,8 @@ rm tests/fixtures/ItemDetails-empty.db
 sqlite3 tests/fixtures/ItemDetails-empty.db < schema/ItemDetails.sql
 ```
 
+The script reads the add-on's table definitions as data and doesn't run its code. When the add-on raises its version without changing any tables, add the old version to `UPGRADABLE_VERSIONS` in `src/cache/mod.rs`, so that existing databases keep working.
+
 To check the writers, let the add-on cache some items in Kodi, crawl the same items with warmup-rs, and compare the two databases:
 
 ```bash

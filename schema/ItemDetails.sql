@@ -265,4 +265,4 @@ CREATE INDEX simplecache_upnext_episode_id_x ON simplecache(upnext_episode_id);
 CREATE INDEX lactivities_id_x ON lactivities(id);
 CREATE INDEX lactivities_expiry_x ON lactivities(expiry);
 COMMIT;
-PRAGMA user_version=50;
+PRAGMA user_version=51;

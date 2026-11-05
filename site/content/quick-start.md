@@ -98,7 +98,7 @@ Stop both crawls, then copy the files to the Kodi device:
 | `output/Textures13.db` | `userdata/Database/Textures13.db` |
 | `output/images/` | `userdata/Thumbnails/` |
 
-Stop Kodi before you replace its databases, and update TMDBHelper first: warmup-rs writes schema version 50, from TMDBHelper 6.19.
+Stop Kodi before you replace its databases, and update TMDBHelper first: warmup-rs writes schema version 51, from TMDBHelper 6.20.2 or later.
 
 Both databases use a write-ahead log, so copy them only after you merge it:
 

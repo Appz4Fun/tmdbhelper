@@ -106,7 +106,7 @@ fn movie_is_a_cache_hit_with_the_addon_fields() {
     );
     assert_eq!(
         value(&conn, "SELECT value FROM unique_id WHERE key='facebook'").unwrap(),
-        "Text(\"None\")"
+        "Null"
     );
     assert_eq!(
         value(&conn, "SELECT release_type FROM certification").unwrap(),
