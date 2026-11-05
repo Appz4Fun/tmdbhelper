@@ -9,9 +9,14 @@ lede = "Every flag has an environment variable, which is handy in systemd units.
 
 | Flag | Variable | Default | Description |
 |---|---|---|---|
-| `--mode` | `WARMUP_MODE` | `metadata` | `metadata`, `images`, or `smoke`. |
+| `--mode` | `WARMUP_MODE` | `metadata` | `metadata`, `images`, `fanart`, or `smoke`. |
 | `--tmdb-api-key` | `WARMUP_TMDB_API_KEY` | none | TMDB API v3 key. Required in metadata mode. |
-| `--concurrency` | `WARMUP_CONCURRENCY` | `40` | Number of concurrent requests to TMDB. |
+| `--fanart-api-key` | `WARMUP_FANART_API_KEY` | none | fanart.tv API key. Required in fanart mode. |
+| `--fanart-client-key` | `WARMUP_FANART_CLIENT_KEY` | none | fanart.tv personal key, sent alongside a project's API key in fanart mode. |
+| `--concurrency` | `WARMUP_CONCURRENCY` | `20` | Number of concurrent requests to TMDB. |
+| `--language` | `WARMUP_LANGUAGE` | `en-US` | The add-on's language setting. TMDBHelper ignores rows in any other language. |
+| `--all-ids` | `WARMUP_ALL_IDS` | off | Queues every title, person, and collection from TMDB's daily ID lists in metadata mode. |
+| `--min-free-gb` | `WARMUP_MIN_FREE_GB` | `10` | Pauses when the output disk has less free space than this many GB. |
 | `--batch-size` | `WARMUP_BATCH_SIZE` | `200` | Number of items to take from the queue per loop in metadata mode. |
 | `--output-dir` | `WARMUP_OUTPUT_DIR` | `./output` | Base folder for the default paths on desktop systems. |
 | `--state-db` | `WARMUP_STATE_DB` | See [Paths](#paths) | Crawler queue and visited-item database. |

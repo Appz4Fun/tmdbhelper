@@ -84,14 +84,16 @@ pub fn cached_filename(url: &str, extension: &str) -> String {
     format!("{}/{}.{}", &hex[..1], hex, extension)
 }
 
+/// Every URL TMDBHelper can ask for at any `artwork_quality` setting, from
+/// `IMAGEPATH_QUALITY_*` in its consts.py. They all point at the one original file.
 pub fn url_variants(path: &str, art_type: &str) -> Vec<String> {
+    if is_full_url(path) {
+        return vec![download_url(path)];
+    }
     let sizes: &[&str] = match art_type {
-        "backdrops" => &["original", "w1280", "w780"],
-        "posters" => &["original", "w1280", "w780", "w500"],
-        "profiles" => &["original", "w780", "h632"],
+        "posters" | "profiles" => &["original", "w780", "w500", "w342"],
         "logos" => &["original", "w500", "w300"],
-        "stills" => &["original", "w780", "w300"],
-        _ => &["original", "w780"],
+        _ => &["original", "w1280", "w780"],
     };
     sizes
         .iter()
@@ -99,15 +101,20 @@ pub fn url_variants(path: &str, art_type: &str) -> Vec<String> {
         .collect()
 }
 
-pub fn download_size(art_type: &str) -> &'static str {
-    match art_type {
-        "backdrops" => "original",
-        _ => "w1280",
-    }
+/// Every image downloads at `original`, the only size TMDB serves unchanged.
+pub const DOWNLOAD_SIZE: &str = "original";
+
+/// fanart.tv rows hold a whole URL, where TMDB rows hold a path.
+fn is_full_url(path: &str) -> bool {
+    path.starts_with("https://") || path.starts_with("http://")
 }
 
-pub fn download_url(path: &str, art_type: &str) -> String {
-    format!("{}{}{}", TMDB_CDN, download_size(art_type), path)
+pub fn download_url(path: &str) -> String {
+    if is_full_url(path) {
+        // TMDBHelper encodes the spaces fanart.tv leaves in some URLs.
+        return path.replace(' ', "%20");
+    }
+    format!("{}{}{}", TMDB_CDN, DOWNLOAD_SIZE, path)
 }
 
 #[cfg(test)]
@@ -149,57 +156,48 @@ mod tests {
     }
 
     #[test]
-    fn url_variants_backdrops() {
-        let v = url_variants("/test.jpg", "backdrops");
-        assert_eq!(v.len(), 3);
-        assert_eq!(v[0], "https://image.tmdb.org/t/p/original/test.jpg");
-        assert_eq!(v[1], "https://image.tmdb.org/t/p/w1280/test.jpg");
-        assert_eq!(v[2], "https://image.tmdb.org/t/p/w780/test.jpg");
+    fn url_variants_cover_every_artwork_quality_setting() {
+        let urls = |path, art_type| -> Vec<String> {
+            url_variants(path, art_type)
+                .iter()
+                .map(|u| u.trim_start_matches(TMDB_CDN).to_owned())
+                .collect()
+        };
+        assert_eq!(
+            urls("/b.jpg", "backdrops"),
+            ["original/b.jpg", "w1280/b.jpg", "w780/b.jpg"]
+        );
+        assert_eq!(
+            urls("/s.jpg", "stills"),
+            ["original/s.jpg", "w1280/s.jpg", "w780/s.jpg"]
+        );
+        assert_eq!(
+            urls("/p.jpg", "posters"),
+            ["original/p.jpg", "w780/p.jpg", "w500/p.jpg", "w342/p.jpg"]
+        );
+        assert_eq!(
+            urls("/f.jpg", "profiles"),
+            ["original/f.jpg", "w780/f.jpg", "w500/f.jpg", "w342/f.jpg"]
+        );
+        assert_eq!(
+            urls("/l.png", "logos"),
+            ["original/l.png", "w500/l.png", "w300/l.png"]
+        );
     }
 
     #[test]
-    fn url_variants_posters() {
-        let v = url_variants("/poster.jpg", "posters");
-        assert_eq!(v.len(), 4);
-        assert_eq!(v[0], "https://image.tmdb.org/t/p/original/poster.jpg");
-        assert_eq!(v[1], "https://image.tmdb.org/t/p/w1280/poster.jpg");
-        assert_eq!(v[2], "https://image.tmdb.org/t/p/w780/poster.jpg");
-        assert_eq!(v[3], "https://image.tmdb.org/t/p/w500/poster.jpg");
+    fn fanart_urls_register_as_themselves() {
+        let url = "https://assets.fanart.tv/fanart/the show-1.png";
+        let encoded = "https://assets.fanart.tv/fanart/the%20show-1.png";
+        assert_eq!(url_variants(url, "clearlogo"), [encoded]);
+        assert_eq!(download_url(url), encoded);
     }
 
     #[test]
-    fn url_variants_profiles() {
-        let v = url_variants("/face.jpg", "profiles");
-        assert_eq!(v.len(), 3);
-        assert_eq!(v[0], "https://image.tmdb.org/t/p/original/face.jpg");
-        assert_eq!(v[1], "https://image.tmdb.org/t/p/w780/face.jpg");
-        assert_eq!(v[2], "https://image.tmdb.org/t/p/h632/face.jpg");
-    }
-
-    #[test]
-    fn url_variants_logos() {
-        let v = url_variants("/logo.png", "logos");
-        assert_eq!(v.len(), 3);
-        assert_eq!(v[0], "https://image.tmdb.org/t/p/original/logo.png");
-        assert_eq!(v[1], "https://image.tmdb.org/t/p/w500/logo.png");
-        assert_eq!(v[2], "https://image.tmdb.org/t/p/w300/logo.png");
-    }
-
-    #[test]
-    fn url_variants_stills() {
-        let v = url_variants("/still.jpg", "stills");
-        assert_eq!(v.len(), 3);
-        assert_eq!(v[0], "https://image.tmdb.org/t/p/original/still.jpg");
-        assert_eq!(v[1], "https://image.tmdb.org/t/p/w780/still.jpg");
-        assert_eq!(v[2], "https://image.tmdb.org/t/p/w300/still.jpg");
-    }
-
-    #[test]
-    fn download_size_by_art_type() {
-        assert_eq!(download_size("backdrops"), "original");
-        assert_eq!(download_size("posters"), "w1280");
-        assert_eq!(download_size("profiles"), "w1280");
-        assert_eq!(download_size("logos"), "w1280");
-        assert_eq!(download_size("stills"), "w1280");
+    fn every_image_downloads_at_original_size() {
+        assert_eq!(
+            download_url("/p.jpg"),
+            "https://image.tmdb.org/t/p/original/p.jpg"
+        );
     }
 }

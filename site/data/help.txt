@@ -9,6 +9,7 @@ Options:
           Possible values:
           - metadata: crawl TMDB and write ItemDetails.db
           - images:   download artwork and register it in Textures13.db
+          - fanart:   fetch fanart.tv art for the movies and shows in ItemDetails.db
           - smoke:    check that the binary runs, then exit without side effects
           
           [env: WARMUP_MODE=]
@@ -19,11 +20,38 @@ Options:
           
           [env: WARMUP_TMDB_API_KEY]
 
+      --fanart-api-key <FANART_API_KEY>
+          fanart.tv API key. Required in fanart mode
+          
+          [env: WARMUP_FANART_API_KEY]
+
+      --fanart-client-key <FANART_CLIENT_KEY>
+          fanart.tv personal key, sent alongside a project's API key in fanart mode
+          
+          [env: WARMUP_FANART_CLIENT_KEY]
+
       --concurrency <CONCURRENCY>
           Number of concurrent requests to TMDB
           
           [env: WARMUP_CONCURRENCY=]
-          [default: 40]
+          [default: 20]
+
+      --language <LANGUAGE>
+          The add-on's language setting. TMDBHelper ignores rows in any other language
+          
+          [env: WARMUP_LANGUAGE=]
+          [default: en-US]
+
+      --all-ids
+          Queue every title, person, and collection from TMDB's daily ID lists in metadata mode
+          
+          [env: WARMUP_ALL_IDS=]
+
+      --min-free-gb <MIN_FREE_GB>
+          Pause when the output disk has less free space than this many GB
+          
+          [env: WARMUP_MIN_FREE_GB=]
+          [default: 10]
 
       --batch-size <BATCH_SIZE>
           Number of items to take from the queue per loop in metadata mode
@@ -76,4 +104,5 @@ Default paths:
 Examples:
   warmup-rs --mode=smoke
   WARMUP_TMDB_API_KEY=<key> warmup-rs
+  WARMUP_TMDB_API_KEY=<key> warmup-rs --all-ids
   warmup-rs --mode=images --concurrency=25

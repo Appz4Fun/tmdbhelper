@@ -39,11 +39,11 @@ On a desktop, press Ctrl+C. On a Kodi box:
 ssh root@coreelec.local 'systemctl stop tmdbhelper-warmup-rs tmdbhelper-warmup-images'
 ```
 
-Both crawls resume from where they stopped.
+Both crawls resume from where they stopped, including the items that were in flight.
 
 ## Tune concurrency
 
-Running both crawls at high concurrency can saturate a USB SSD. On a 4-core ARM box with a USB 3.0 SSD, about 40 metadata requests and 25 image requests at once work well. Lower `--concurrency` if playback stutters.
+Running both crawls at high concurrency can saturate a USB SSD. On a 4-core ARM box with a USB 3.0 SSD, about 20 metadata requests and 25 image requests at once work well. Lower `--concurrency` if playback stutters. With more than about 20, a fast connection hits TMDB's rate limit, which slows the crawl down.
 
 ## SSD TRIM helpers
 

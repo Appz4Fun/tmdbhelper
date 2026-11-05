@@ -10,6 +10,7 @@ lede = "Run just with no arguments to list the recipes. Recipes that take argume
 | Recipe | What it does |
 |---|---|
 | `just test` | Runs `cargo test`. Extra arguments go to Cargo, for example `just test paths`. |
+| `just test-live` | Runs the tests that call TMDB. Needs `TMDB_API_KEY`. |
 | `just fmt` | Formats the code with `cargo fmt`. |
 | `just lint` | Checks formatting and runs Clippy with warnings as errors. |
 | `just run` | Runs a release build with the defaults. Extra flags go to warmup-rs, for example `just run --mode=images`. |

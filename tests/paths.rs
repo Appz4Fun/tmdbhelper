@@ -58,3 +58,10 @@ fn creates_item_details_with_schema_and_seed_rows() {
         .unwrap();
     assert_eq!(art, 0);
 }
+
+#[test]
+fn available_space_reads_a_real_disk() {
+    let dir = tempfile::tempdir().unwrap();
+    assert!(warmup_rs::paths::available_space(dir.path()).unwrap() > 0);
+    assert!(warmup_rs::paths::available_space(&dir.path().join("missing")).is_none());
+}
