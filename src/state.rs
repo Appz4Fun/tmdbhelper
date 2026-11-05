@@ -283,6 +283,20 @@ impl StateDb {
         Ok(count as i64)
     }
 
+    /// The depth an item has in the queue now. Another response can find a
+    /// claimed item closer to a seed while it's being fetched.
+    pub fn queued_depth(&self, tmdb_id: i64, tmdb_type: TmdbType) -> Result<Option<i64>> {
+        match self.conn.query_row(
+            "SELECT depth FROM queue WHERE tmdb_id=?1 AND tmdb_type=?2",
+            params![tmdb_id, type_to_str(tmdb_type)],
+            |r| r.get(0),
+        ) {
+            Ok(depth) => Ok(Some(depth)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
     pub fn queue_size(&self) -> Result<i64> {
         Ok(self
             .conn

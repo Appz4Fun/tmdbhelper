@@ -263,7 +263,14 @@ fn flush_batch(
     let t1 = std::time::Instant::now();
     let children: Vec<Vec<Child>> = batch
         .iter()
-        .map(|job| extract_children(&job.item, &job.payload))
+        .map(|job| {
+            // Use the shallowest depth the item was found at, even while claimed.
+            let mut item = job.item.clone();
+            if let Ok(Some(depth)) = state.queued_depth(item.tmdb_id, item.tmdb_type) {
+                item.depth = item.depth.min(depth);
+            }
+            extract_children(&item, &job.payload)
+        })
         .collect();
     let state_items: Vec<crate::state::ChildBatch<'_>> = batch
         .iter()

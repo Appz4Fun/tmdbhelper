@@ -110,3 +110,13 @@ fn requeue_items_brings_back_only_visited_items() {
     assert_eq!(s.queue_size().unwrap(), 1);
     assert_eq!(s.visited_count().unwrap(), 0);
 }
+
+#[test]
+fn queued_depth_sees_a_claimed_item_found_closer_to_a_seed() {
+    let (_dir, mut s) = state();
+    s.enqueue_child(550, TmdbType::Movie, 2, 1.0).unwrap();
+    s.pop_batch(10).unwrap();
+    s.enqueue_child(550, TmdbType::Movie, 1, 1.0).unwrap();
+    assert_eq!(s.queued_depth(550, TmdbType::Movie).unwrap(), Some(1));
+    assert_eq!(s.queued_depth(680, TmdbType::Movie).unwrap(), None);
+}

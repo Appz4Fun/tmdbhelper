@@ -1162,6 +1162,14 @@ fn person_credits(
     let prefix = if movie { "movie" } else { "tv" };
     for i in array(&items["cast"]) {
         media_stub(conn, ctx, i, movie)?;
+        let parent = format!("{prefix}.{}", i["id"].as_i64().unwrap_or_default());
+        // A blank role is NULL, which never conflicts with the unique key, so
+        // check for the credit first instead of adding a copy on every refresh.
+        if matches!(sql(&i["character"]), Sql::Null)
+            && credit_exists(conn, "castmember", person_tmdb_id, &parent)?
+        {
+            continue;
+        }
         fill(
             conn,
             "castmember",
@@ -1171,15 +1179,24 @@ fn person_credits(
                 ("role", sql(&i["character"])),
                 ("ordering", sql(&i["order"])),
                 ("appearances", sql(&i["episode_count"])),
-                (
-                    "parent_id",
-                    Sql::Text(format!("{prefix}.{}", i["id"].as_i64().unwrap_or_default())),
-                ),
+                ("parent_id", Sql::Text(parent)),
             ],
         )?;
     }
     for i in array(&items["crew"]) {
         media_stub(conn, ctx, i, movie)?;
+        let parent = format!("{prefix}.{}", i["id"].as_i64().unwrap_or_default());
+        if (matches!(sql(&i["job"]), Sql::Null) || matches!(sql(&i["department"]), Sql::Null))
+            && crew_exists(
+                conn,
+                person_tmdb_id,
+                &sql(&i["job"]),
+                &sql(&i["department"]),
+                &parent,
+            )?
+        {
+            continue;
+        }
         fill(
             conn,
             "crewmember",
@@ -1189,14 +1206,36 @@ fn person_credits(
                 ("role", sql(&i["job"])),
                 ("department", sql(&i["department"])),
                 ("appearances", sql(&i["episode_count"])),
-                (
-                    "parent_id",
-                    Sql::Text(format!("{prefix}.{}", i["id"].as_i64().unwrap_or_default())),
-                ),
+                ("parent_id", Sql::Text(parent)),
             ],
         )?;
     }
     Ok(())
+}
+
+/// Whether a person already has a blank-role cast credit on an item.
+fn credit_exists(conn: &Connection, table: &str, person: i64, parent: &str) -> Result<bool> {
+    Ok(conn
+        .prepare_cached(&format!(
+            "SELECT EXISTS(SELECT 1 FROM {table} WHERE tmdb_id=?1 AND role IS NULL AND parent_id=?2)"
+        ))?
+        .query_row(params![person, parent], |r| r.get(0))?)
+}
+
+/// Whether a person already has this crew credit, comparing NULLs as equal.
+fn crew_exists(
+    conn: &Connection,
+    person: i64,
+    job: &Sql,
+    department: &Sql,
+    parent: &str,
+) -> Result<bool> {
+    Ok(conn
+        .prepare_cached(
+            "SELECT EXISTS(SELECT 1 FROM crewmember WHERE tmdb_id=?1 AND role IS ?2
+                 AND department IS ?3 AND parent_id=?4)",
+        )?
+        .query_row(params![person, job, department, parent], |r| r.get(0))?)
 }
 
 pub fn write_person(conn: &Connection, ctx: &WriteContext, p: &Value) -> Result<()> {
@@ -1386,6 +1425,34 @@ mod tests {
         )
         .unwrap();
         assert_eq!(get(), "tt1");
+    }
+
+    #[test]
+    fn a_blank_role_credit_is_written_once() {
+        let conn = schema_db();
+        let ctx = WriteContext {
+            language: "en-US".into(),
+            genres: Default::default(),
+        };
+        let items = serde_json::json!({
+            "cast": [{"id": 550, "title": "Fight Club", "character": "", "order": 3}],
+            "crew": [{"id": 550, "title": "Fight Club", "job": "Thanks", "department": null}],
+        });
+        for _ in 0..2 {
+            person_credits(&conn, &ctx, 287, &items, true).unwrap();
+        }
+        let count = |table: &str| -> i64 {
+            conn.query_row(
+                &format!(
+                    "SELECT COUNT(*) FROM {table} WHERE tmdb_id=287 AND parent_id='movie.550'"
+                ),
+                [],
+                |r| r.get(0),
+            )
+            .unwrap()
+        };
+        assert_eq!(count("castmember"), 1);
+        assert_eq!(count("crewmember"), 1);
     }
 
     #[test]
