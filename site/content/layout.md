@@ -29,6 +29,6 @@ lede = "warmup-rs is one crate with a library and a binary. The binary parses fl
 | `scripts/` | Helpers for the Vale recipes and the opkg package build. |
 | `Justfile` | The recipes. See [Just recipes](justfile.md). |
 | `Dockerfile` | The multi-stage image build. |
-| `packaging/opkg/` | The Entware package's systemd units, settings file, and install scripts. |
+| `packaging/opkg/` | The Entware package's systemd units, init scripts, settings file, and install scripts. |
 | `tmdbhelper-warmup-rs.service` | The systemd unit for metadata mode. |
 | `ssd-trim.sh`, `ssd-trim.py` | TRIM helpers for USB SSDs. See [Operate](operate.md#ssd-trim-helpers). |
