@@ -1,6 +1,7 @@
 pub mod api;
 pub mod cache;
 pub mod fanart;
+pub mod http;
 pub mod id;
 pub mod images;
 pub mod paths;
