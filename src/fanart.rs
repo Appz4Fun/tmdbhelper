@@ -3,7 +3,7 @@
 //! `baseitem.fanart_tv` is set, whether or not fanart.tv has art for it.
 
 use crate::cache::{mapper, open_writer, WriteContext};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use reqwest::{Client, StatusCode};
 use rusqlite::Connection;
 use serde_json::Value;
@@ -49,7 +49,7 @@ async fn fetch(client: &Client, query: &str, path: &str) -> Result<Outcome> {
             Ok(r) => r,
             Err(e) => {
                 // The URL holds the API keys, so it must never reach a log.
-                last = e.without_url().to_string();
+                last = crate::http::error_chain(&e.without_url());
                 tokio::time::sleep(backoff).await;
                 continue;
             }
@@ -58,7 +58,9 @@ async fn fetch(client: &Client, query: &str, path: &str) -> Result<Outcome> {
         if status.is_success() {
             return match resp.json::<Value>().await {
                 Ok(data) => Ok(Outcome::Found(data)),
-                Err(e) => Ok(Outcome::Unavailable(e.without_url().to_string())),
+                Err(e) => Ok(Outcome::Unavailable(crate::http::error_chain(
+                    &e.without_url(),
+                ))),
             };
         }
         match status {
@@ -123,11 +125,7 @@ pub async fn run(options: Options) -> Result<()> {
         concurrency,
         min_free_bytes,
     } = options;
-    let client = Client::builder()
-        .timeout(Duration::from_secs(30))
-        .pool_max_idle_per_host(50)
-        .build()
-        .context("build fanart.tv HTTP client")?;
+    let client = crate::http::client("fanart.tv")?;
     let query = match &client_key {
         Some(key) => format!("api_key={api_key}&client_key={key}"),
         None => format!("api_key={api_key}"),

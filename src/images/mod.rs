@@ -134,11 +134,7 @@ pub async fn run(
     let (tx, mut rx) = mpsc::channel::<SavedImage>(200);
     let (reg_tx, mut reg_rx) = mpsc::channel::<RegisterOnly>(200);
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .pool_max_idle_per_host(50)
-        .build()
-        .context("build image HTTP client")?;
+    let client = crate::http::client("image")?;
 
     #[allow(unused_variables)]
     let writer_handle = {
@@ -374,7 +370,7 @@ pub async fn run(
                                 url,
                                 attempt + 1,
                                 backoff,
-                                e
+                                crate::http::error_chain(&e.without_url())
                             );
                             tokio::time::sleep(backoff).await;
                             continue;

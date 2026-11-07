@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 use serde_json::Value;
@@ -53,11 +53,7 @@ pub struct TmdbClient {
 
 impl TmdbClient {
     pub fn new(api_key: String, language: String) -> Result<Self> {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(30))
-            .pool_max_idle_per_host(50)
-            .build()
-            .context("build HTTP client")?;
+        let client = crate::http::client("TMDB")?;
         Ok(Self {
             client,
             api_key,
@@ -153,7 +149,7 @@ impl TmdbClient {
                 Ok(r) => r,
                 Err(e) => {
                     // The URL holds the API key, so it must never reach a log.
-                    last = e.without_url().to_string();
+                    last = crate::http::error_chain(&e.without_url());
                     warn!(
                         "TMDB request for {path} failed, retry {}: {last}",
                         attempt + 1
