@@ -334,13 +334,15 @@ pub async fn run(
             let download_url = texture_hash::download_url(&row.path);
             let cached_filename = texture_hash::cached_filename(&download_url, ext);
 
+            // Textures13.db decides what's done, not the folder: a registered image
+            // may have been moved to other storage (a NAS) to free this disk, and
+            // fetching it again would refill the disk with the same files.
+            let variants = texture_hash::url_variants(&row.path, &row.art_type);
+            if variants.iter().any(|u| cached_urls.contains(u)) {
+                skipped += 1;
+                continue;
+            }
             if existing_files.contains(&cached_filename) {
-                let variants = texture_hash::url_variants(&row.path, &row.art_type);
-                let any_registered = variants.iter().any(|u| cached_urls.contains(u));
-                if any_registered {
-                    skipped += 1;
-                    continue;
-                }
                 let _ = reg_tx.try_send(RegisterOnly {
                     path: row.path.clone(),
                     art_type: row.art_type.clone(),

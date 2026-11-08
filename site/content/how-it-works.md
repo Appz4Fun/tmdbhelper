@@ -14,7 +14,7 @@ lede = "warmup-rs has two independent modes. Metadata mode fills ItemDetails.db,
 | `fanart` | Fetches fanart.tv art for the movies and shows in `ItemDetails.db`, and marks them as checked. Needs a fanart.tv API key. |
 | `smoke` | Opens an in-memory SQLite database and builds an HTTP client, then exits. Use it to check that the binary runs on a device. |
 
-Both real modes are restart-safe. Metadata mode resumes from its queue in `state.db`, and images mode skips files already on disk and URLs already in `Textures13.db`. The two modes are separate processes, so you can run them at the same time.
+Both real modes are restart-safe. Metadata mode resumes from its queue in `state.db`, and images mode skips any image whose URL is already in `Textures13.db`, even if you've moved its file off this disk. It registers files that are on disk but not in the database without downloading them again. The two modes are separate processes, so you can run them at the same time.
 
 ## Metadata crawl
 
