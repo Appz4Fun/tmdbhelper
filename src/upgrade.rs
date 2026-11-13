@@ -42,6 +42,13 @@ pub fn run(source: &Path, target: &Path) -> Result<Summary> {
     }
     let version = source_version(source)?;
     let partial = partial_path(target);
+    if same_file(source, &partial)? {
+        bail!(
+            "{} is the temporary name for {}; pick another target",
+            source.display(),
+            target.display()
+        );
+    }
     if partial.exists() {
         std::fs::remove_file(&partial)
             .with_context(|| format!("remove the leftover {}", partial.display()))?;
@@ -82,6 +89,31 @@ fn source_version(source: &Path) -> Result<i64> {
         );
     }
     Ok(version)
+}
+
+/// Whether `other` names the same file as `source`, through symlinks too.
+fn same_file(source: &Path, other: &Path) -> Result<bool> {
+    let source = source
+        .canonicalize()
+        .with_context(|| format!("resolve {}", source.display()))?;
+    let resolved = match other.canonicalize() {
+        Ok(path) => path,
+        Err(_) => match (other.parent(), other.file_name()) {
+            (Some(dir), Some(name)) => {
+                let dir = if dir.as_os_str().is_empty() {
+                    Path::new(".")
+                } else {
+                    dir
+                };
+                match dir.canonicalize() {
+                    Ok(dir) => dir.join(name),
+                    Err(_) => return Ok(false),
+                }
+            }
+            _ => return Ok(false),
+        },
+    };
+    Ok(source == resolved)
 }
 
 fn partial_path(target: &Path) -> PathBuf {
@@ -303,6 +335,18 @@ mod tests {
         std::fs::write(&target, b"keep me").unwrap();
         assert!(run(&source, &target).is_err());
         assert_eq!(std::fs::read(&target).unwrap(), b"keep me");
+    }
+
+    #[test]
+    fn never_deletes_a_source_that_has_the_temporary_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("cache.db");
+        let source = partial_path(&target);
+        v51(&source);
+        let before = std::fs::read(&source).unwrap();
+        assert!(run(&source, &target).is_err());
+        assert_eq!(std::fs::read(&source).unwrap(), before);
+        assert!(!target.exists());
     }
 
     #[test]

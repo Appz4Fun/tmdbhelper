@@ -199,12 +199,24 @@ fn leased(
             .query_row([anchor], |r| r.get(0))
             .unwrap_or(0),
     };
+    extend_leases(
+        conn,
+        deletion,
+        std::iter::once(anchor)
+            .chain(parents.iter().map(String::as_str))
+            .chain(ids.iter().map(String::as_str)),
+    )
+}
+
+/// `set_cached_deletion`: raises each row's lease to `deletion`, never lowers it.
+fn extend_leases<'a>(
+    conn: &Connection,
+    deletion: i64,
+    ids: impl IntoIterator<Item = &'a str>,
+) -> Result<()> {
     let mut lease =
         conn.prepare_cached("UPDATE baseitem SET deletion=MAX(deletion, ?1) WHERE id=?2")?;
-    for id in std::iter::once(anchor)
-        .chain(parents.iter().map(String::as_str))
-        .chain(ids.iter().map(String::as_str))
-    {
+    for id in ids {
         lease.execute(params![deletion, id])?;
     }
     Ok(())
@@ -1026,8 +1038,35 @@ fn write_tv_rows(conn: &Connection, ctx: &WriteContext, t: &Value, groups: &[Val
     Ok(())
 }
 
-/// `get_episode_group_seasons`: a group's seasons, and every episode they list.
+/// An episode group is an item of its own in the add-on, with its own expiry,
+/// so it leases the show and the rows it lists for as long as it lives. The
+/// show's write still gives them the show's lease too.
 fn write_episode_group(conn: &Connection, ctx: &WriteContext, tv_id: i64, g: &Value) -> Result<()> {
+    let Some(group_tmdb_id) = g["id"].as_str() else {
+        return Ok(());
+    };
+    let id = format!("episode_group.{group_tmdb_id}");
+    let start = ctx.leases.borrow().len();
+    write_episode_group_rows(conn, ctx, tv_id, g)?;
+    let deletion: i64 = conn
+        .prepare_cached("SELECT deletion FROM baseitem WHERE id=?1")?
+        .query_row([&id], |r| r.get(0))?;
+    let ids = ctx.leases.borrow()[start..].to_vec();
+    let tvshow_id = format!("tv.{tv_id}");
+    extend_leases(
+        conn,
+        deletion,
+        std::iter::once(tvshow_id.as_str()).chain(ids.iter().map(String::as_str)),
+    )
+}
+
+/// `get_episode_group_seasons`: a group's seasons, and every episode they list.
+fn write_episode_group_rows(
+    conn: &Connection,
+    ctx: &WriteContext,
+    tv_id: i64,
+    g: &Value,
+) -> Result<()> {
     let Some(group_tmdb_id) = g["id"].as_str() else {
         return Ok(());
     };
@@ -1588,6 +1627,36 @@ mod tests {
         .unwrap();
         write_season(&conn, &ctx, 1, 1, &season).unwrap();
         assert_eq!(deletion("tv.1"), own + 1000);
+    }
+
+    #[test]
+    fn an_episode_group_leases_its_show_for_its_own_lifetime() {
+        let conn = schema_db();
+        let ctx = WriteContext::new("en-US".into(), Default::default());
+        // An airing show expires in seven days, its group in thirty.
+        let show = serde_json::json!({
+            "id": 1,
+            "first_air_date": "2001-01-01",
+            "next_episode_to_air": {"season_number": 1, "episode_number": 2},
+        });
+        let group = serde_json::json!({
+            "id": "g1",
+            "groups": [{"id": "gs1", "episodes": [{"season_number": 1, "episode_number": 1}]}],
+        });
+        write_tv(&conn, &ctx, &show, &[group]).unwrap();
+        let row = |id: &str| -> (i64, i64) {
+            conn.query_row(
+                "SELECT expiry, deletion FROM baseitem WHERE id=?1",
+                [id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap()
+        };
+        let (show_expiry, show_deletion) = row("tv.1");
+        let (_, group_deletion) = row("episode_group.g1");
+        assert!(group_deletion > show_expiry + DELETION_GRACE);
+        assert_eq!(show_deletion, group_deletion);
+        assert_eq!(row("episode_group_season.gs1").1, group_deletion);
     }
 
     #[test]
