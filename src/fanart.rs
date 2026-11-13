@@ -133,10 +133,7 @@ pub async fn run(options: Options) -> Result<()> {
     let query = Arc::new(query);
     let sem = Arc::new(Semaphore::new(concurrency));
     let mut conn = open_writer(&item_details_path)?;
-    let ctx = WriteContext {
-        language,
-        genres: Default::default(),
-    };
+    let ctx = WriteContext::new(language, Default::default());
     // Items that keep failing wait for the next run, so they don't block the rest.
     let mut skip = HashSet::new();
     let mut done = 0u64;

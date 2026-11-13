@@ -44,6 +44,6 @@ Both writers open SQLite in WAL mode with a long busy timeout, so warmup-rs can 
 
 TMDBHelper only reads a cached row when the row is unexpired, has a full data level, and matches the add-on's language, so warmup-rs writes each `baseitem` with `--language`, `en-US` by default. Set `--language` to match the add-on's setting. It also leaves `ratings` empty, because a row there stops the add-on fetching ratings from its other sources.
 
-`schema/ItemDetails.sql` sets the add-on's schema version. Keep it current: the add-on drops every table in a database with an older non-zero version. warmup-rs refuses to write to a database with a different version, and `scripts/addon-schema.py` rebuilds the schema from a TMDBHelper checkout.
+`schema/ItemDetails.sql` sets the add-on's schema version. Keep it current: the add-on drops every table in a database with an older non-zero version. warmup-rs refuses to write to a database with a different version, `--mode=upgrade` copies an older one into a new file at the current version, and `scripts/addon-schema.py` rebuilds the schema from a TMDBHelper checkout.
 
 With the add-on's fanart.tv lookup on, it also ignores a movie or show until `baseitem.fanart_tv` is set, so run `fanart` mode, which fetches that art and sets the flag. warmup-rs writes no ratings from other services, since the add-on fetches those itself when it needs them.

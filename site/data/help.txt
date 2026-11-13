@@ -11,6 +11,7 @@ Options:
           - images:   download artwork and register it in Textures13.db
           - fanart:   fetch fanart.tv art for the movies and shows in ItemDetails.db
           - smoke:    check that the binary runs, then exit without side effects
+          - upgrade:  copy an older ItemDetails.db into a new file with the current schema
           
           [env: WARMUP_MODE=]
           [default: metadata]
@@ -85,6 +86,11 @@ Options:
           
           [env: WARMUP_THUMBNAILS_DIR=]
 
+      --upgrade-to <UPGRADE_TO>
+          Where upgrade mode writes the new file. It reads --item-details-db and never changes it. Defaults to ItemDetails.v<version>.db next to it
+          
+          [env: WARMUP_UPGRADE_TO=]
+
   -h, --help
           Print help (see a summary with '-h')
 
@@ -106,3 +112,4 @@ Examples:
   WARMUP_TMDB_API_KEY=<key> warmup-rs
   WARMUP_TMDB_API_KEY=<key> warmup-rs --all-ids
   warmup-rs --mode=images --concurrency=25
+  warmup-rs --mode=upgrade --upgrade-to ItemDetails.v55.db

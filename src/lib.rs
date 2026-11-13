@@ -7,4 +7,5 @@ pub mod images;
 pub mod paths;
 pub mod seed;
 pub mod state;
+pub mod upgrade;
 pub mod worker;

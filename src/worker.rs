@@ -347,7 +347,7 @@ pub async fn run(options: Options) -> Result<()> {
             Default::default()
         }
     };
-    let ctx = WriteContext { language, genres };
+    let ctx = WriteContext::new(language, genres);
 
     let sem = Arc::new(Semaphore::new(concurrency));
     let (tx, mut rx) = mpsc::channel::<WriterMessage>(200);
