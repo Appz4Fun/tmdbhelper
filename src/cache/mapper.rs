@@ -1,6 +1,8 @@
 //! Writes TMDB responses the way TMDBHelper's `mappings.py` and its factories do.
 
-use crate::cache::{now_unix, WriteContext, DATALEVEL_FULL, DAY, DEFAULT_EXPIRY, SHORTER_EXPIRY};
+use crate::cache::{
+    now_unix, WriteContext, DATALEVEL_FULL, DAY, DEFAULT_EXPIRY, DELETION_GRACE, SHORTER_EXPIRY,
+};
 use crate::id::{build_episode_id, build_season_id};
 use anyhow::Result;
 use rusqlite::types::Value as Sql;
@@ -129,6 +131,8 @@ fn expiry_seconds(default: i64, premiered: &Value, next_episode: &Value) -> i64 
     default
 }
 
+/// Writes an item's own row. Its deletion lease starts at its expiry plus the
+/// grace period and never shrinks, like the add-on's `set_cached_deletion`.
 fn base_full(
     conn: &Connection,
     ctx: &WriteContext,
@@ -136,20 +140,28 @@ fn base_full(
     mediatype: &str,
     expiry_in: i64,
 ) -> Result<()> {
+    let expiry = now_unix() + expiry_in;
     conn.prepare_cached(
-        "INSERT INTO baseitem (id, mediatype, expiry, datalevel, fanart_tv, translation, language)
-         VALUES (?1, ?2, ?3, ?4, 0, 1, ?5)
+        "INSERT INTO baseitem (id, mediatype, expiry, datalevel, fanart_tv, translation, language, deletion)
+         VALUES (?1, ?2, ?3, ?4, 0, 1, ?5, ?6)
          ON CONFLICT(id) DO UPDATE SET mediatype=excluded.mediatype, expiry=excluded.expiry,
              datalevel=excluded.datalevel, fanart_tv=excluded.fanart_tv,
-             translation=excluded.translation, language=excluded.language",
+             translation=excluded.translation, language=excluded.language,
+             deletion=MAX(deletion, excluded.deletion)",
     )?
     .execute(rusqlite::params![
         id,
         mediatype,
-        now_unix() + expiry_in,
+        expiry,
         DATALEVEL_FULL,
-        &ctx.language
+        &ctx.language,
+        expiry + DELETION_GRACE
     ])?;
+    // The first full row is the item being written; later ones, such as a
+    // show's episode groups, keep their own lease.
+    if ctx.lease_expiry.get().is_none() {
+        ctx.lease_expiry.set(Some(expiry));
+    }
     Ok(())
 }
 
@@ -159,6 +171,42 @@ fn base_stub(conn: &Connection, ctx: &WriteContext, id: &str, mediatype: &str) -
         "INSERT OR IGNORE INTO baseitem (id, mediatype, expiry, language) VALUES (?1, ?2, 0, ?3)",
     )?
     .execute(rusqlite::params![id, mediatype, &ctx.language])?;
+    ctx.leases.borrow_mut().push(id.to_owned());
+    Ok(())
+}
+
+/// Runs one item's write, then gives every row it relied on the item's lease,
+/// as the add-on's `try_cached_data` does last. `parents` are the structural
+/// parents whose deletion would cascade to the item. An item without its own
+/// full row, such as a fanart.tv update, passes on the lease of `anchor`.
+fn leased(
+    conn: &Connection,
+    ctx: &WriteContext,
+    anchor: &str,
+    parents: &[String],
+    write: impl FnOnce() -> Result<()>,
+) -> Result<()> {
+    ctx.leases.borrow_mut().clear();
+    ctx.lease_expiry.set(None);
+    let result = write();
+    let ids = std::mem::take(&mut *ctx.leases.borrow_mut());
+    let expiry = ctx.lease_expiry.take();
+    result?;
+    let deletion: i64 = match expiry {
+        Some(expiry) => expiry + DELETION_GRACE,
+        None => conn
+            .prepare_cached("SELECT deletion FROM baseitem WHERE id=?1")?
+            .query_row([anchor], |r| r.get(0))
+            .unwrap_or(0),
+    };
+    let mut lease =
+        conn.prepare_cached("UPDATE baseitem SET deletion=MAX(deletion, ?1) WHERE id=?2")?;
+    for id in std::iter::once(anchor)
+        .chain(parents.iter().map(String::as_str))
+        .chain(ids.iter().map(String::as_str))
+    {
+        lease.execute(params![deletion, id])?;
+    }
     Ok(())
 }
 
@@ -766,7 +814,7 @@ fn season_stub(conn: &Connection, ctx: &WriteContext, tv_id: i64, i: &Value) -> 
     default_art_of(conn, &id, i)
 }
 
-pub fn write_movie(conn: &Connection, ctx: &WriteContext, m: &Value) -> Result<()> {
+fn write_movie_rows(conn: &Connection, ctx: &WriteContext, m: &Value) -> Result<()> {
     let tmdb_id = m["id"].as_i64().unwrap_or_default();
     let id = format!("movie.{tmdb_id}");
     let expiry = expiry_seconds(DEFAULT_EXPIRY, &m["release_date"], &Value::Null);
@@ -861,7 +909,7 @@ fn certifications_movie(conn: &Connection, parent: &str, m: &Value) -> Result<()
 }
 
 /// Writes a show and the episode groups fetched alongside it.
-pub fn write_tv(conn: &Connection, ctx: &WriteContext, t: &Value, groups: &[Value]) -> Result<()> {
+fn write_tv_rows(conn: &Connection, ctx: &WriteContext, t: &Value, groups: &[Value]) -> Result<()> {
     let tmdb_id = t["id"].as_i64().unwrap_or_default();
     let id = format!("tv.{tmdb_id}");
     let next = &t["next_episode_to_air"];
@@ -1073,7 +1121,7 @@ fn write_episode_group(conn: &Connection, ctx: &WriteContext, tv_id: i64, g: &Va
     Ok(())
 }
 
-pub fn write_season(
+fn write_season_rows(
     conn: &Connection,
     ctx: &WriteContext,
     tv_id: i64,
@@ -1111,7 +1159,7 @@ pub fn write_season(
     images(conn, &id, s)
 }
 
-pub fn write_episode(
+fn write_episode_rows(
     conn: &Connection,
     ctx: &WriteContext,
     tv_id: i64,
@@ -1239,7 +1287,7 @@ fn crew_exists(
         .query_row(params![person, job, department, parent], |r| r.get(0))?)
 }
 
-pub fn write_person(conn: &Connection, ctx: &WriteContext, p: &Value) -> Result<()> {
+fn write_person_rows(conn: &Connection, ctx: &WriteContext, p: &Value) -> Result<()> {
     let tmdb_id = p["id"].as_i64().unwrap_or_default();
     let id = format!("person.{tmdb_id}");
     base_full(conn, ctx, &id, "person", DEFAULT_EXPIRY)?;
@@ -1303,7 +1351,7 @@ enum FanartSeasons {
 }
 
 /// Writes a fanart.tv response, then marks the item as checked.
-pub fn write_fanart(conn: &Connection, ctx: &WriteContext, id: &str, data: &Value) -> Result<()> {
+fn write_fanart_rows(conn: &Connection, ctx: &WriteContext, id: &str, data: &Value) -> Result<()> {
     let Some(lists) = data.as_object() else {
         return mark_fanart_checked(conn, id);
     };
@@ -1356,7 +1404,7 @@ pub fn write_fanart(conn: &Connection, ctx: &WriteContext, id: &str, data: &Valu
     mark_fanart_checked(conn, id)
 }
 
-pub fn write_collection(conn: &Connection, ctx: &WriteContext, c: &Value) -> Result<()> {
+fn write_collection_rows(conn: &Connection, ctx: &WriteContext, c: &Value) -> Result<()> {
     let tmdb_id = c["id"].as_i64().unwrap_or_default();
     let id = format!("collection.{tmdb_id}");
     base_full(conn, ctx, &id, "set", DEFAULT_EXPIRY)?;
@@ -1381,6 +1429,62 @@ pub fn write_collection(conn: &Connection, ctx: &WriteContext, c: &Value) -> Res
     customs(conn, &id, c)?;
     default_art_of(conn, &id, c)?;
     images(conn, &id, c)
+}
+
+pub fn write_movie(conn: &Connection, ctx: &WriteContext, m: &Value) -> Result<()> {
+    let id = format!("movie.{}", m["id"].as_i64().unwrap_or_default());
+    leased(conn, ctx, &id, &[], || write_movie_rows(conn, ctx, m))
+}
+
+pub fn write_tv(conn: &Connection, ctx: &WriteContext, t: &Value, groups: &[Value]) -> Result<()> {
+    let id = format!("tv.{}", t["id"].as_i64().unwrap_or_default());
+    leased(conn, ctx, &id, &[], || write_tv_rows(conn, ctx, t, groups))
+}
+
+pub fn write_season(
+    conn: &Connection,
+    ctx: &WriteContext,
+    tv_id: i64,
+    season: i64,
+    s: &Value,
+) -> Result<()> {
+    let id = build_season_id(tv_id, season);
+    let parents = [format!("tv.{tv_id}")];
+    leased(conn, ctx, &id, &parents, || {
+        write_season_rows(conn, ctx, tv_id, season, s)
+    })
+}
+
+pub fn write_episode(
+    conn: &Connection,
+    ctx: &WriteContext,
+    tv_id: i64,
+    season: i64,
+    episode: i64,
+    e: &Value,
+) -> Result<()> {
+    let id = build_episode_id(tv_id, season, episode);
+    let parents = [format!("tv.{tv_id}"), build_season_id(tv_id, season)];
+    leased(conn, ctx, &id, &parents, || {
+        write_episode_rows(conn, ctx, tv_id, season, episode, e)
+    })
+}
+
+pub fn write_person(conn: &Connection, ctx: &WriteContext, p: &Value) -> Result<()> {
+    let id = format!("person.{}", p["id"].as_i64().unwrap_or_default());
+    leased(conn, ctx, &id, &[], || write_person_rows(conn, ctx, p))
+}
+
+pub fn write_collection(conn: &Connection, ctx: &WriteContext, c: &Value) -> Result<()> {
+    let id = format!("collection.{}", c["id"].as_i64().unwrap_or_default());
+    leased(conn, ctx, &id, &[], || write_collection_rows(conn, ctx, c))
+}
+
+/// fanart.tv art adds season rows under an item, so they share its lease.
+pub fn write_fanart(conn: &Connection, ctx: &WriteContext, id: &str, data: &Value) -> Result<()> {
+    leased(conn, ctx, id, &[], || {
+        write_fanart_rows(conn, ctx, id, data)
+    })
 }
 
 #[cfg(test)]
@@ -1446,12 +1550,50 @@ mod tests {
     }
 
     #[test]
+    fn a_season_leases_its_show_and_episode_stubs() {
+        let conn = schema_db();
+        let ctx = WriteContext::new("en-US".into(), Default::default());
+        conn.execute(
+            "INSERT INTO baseitem (id, mediatype, expiry) VALUES ('tv.1', 'tvshow', 0)",
+            [],
+        )
+        .unwrap();
+        let season = serde_json::json!({
+            "air_date": "2001-01-01",
+            "episodes": [{"season_number": 1, "episode_number": 1}],
+        });
+        write_season(&conn, &ctx, 1, 1, &season).unwrap();
+        let deletion = |id: &str| -> i64 {
+            conn.query_row("SELECT deletion FROM baseitem WHERE id=?1", [id], |r| {
+                r.get(0)
+            })
+            .unwrap()
+        };
+        let (expiry, own): (i64, i64) = conn
+            .query_row(
+                "SELECT expiry, deletion FROM baseitem WHERE id='tv.1.1'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(own, expiry + DELETION_GRACE);
+        assert_eq!(deletion("tv.1"), own);
+        assert_eq!(deletion("tv.1.1.1"), own);
+
+        // A later write with a shorter lease never shortens it.
+        conn.execute(
+            "UPDATE baseitem SET deletion=?1 WHERE id='tv.1'",
+            [own + 1000],
+        )
+        .unwrap();
+        write_season(&conn, &ctx, 1, 1, &season).unwrap();
+        assert_eq!(deletion("tv.1"), own + 1000);
+    }
+
+    #[test]
     fn a_blank_role_credit_is_written_once() {
         let conn = schema_db();
-        let ctx = WriteContext {
-            language: "en-US".into(),
-            genres: Default::default(),
-        };
+        let ctx = WriteContext::new("en-US".into(), Default::default());
         let items = serde_json::json!({
             "cast": [{"id": 550, "title": "Fight Club", "character": "", "order": 3}],
             "crew": [{"id": 550, "title": "Fight Club", "job": "Thanks", "department": null}],

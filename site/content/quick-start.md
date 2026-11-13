@@ -98,7 +98,17 @@ Stop both crawls, then copy the files to the Kodi device:
 | `output/Textures13.db` | `userdata/Database/Textures13.db` |
 | `output/images/` | `userdata/Thumbnails/` |
 
-Stop Kodi before you replace its databases, and update TMDBHelper first: warmup-rs writes schema version 51, from TMDBHelper 6.20.2 or later.
+Stop Kodi before you replace its databases, and update TMDBHelper first: warmup-rs writes schema version 55, from TMDBHelper 6.21.5 or later. An older add-on drops every table in a newer file.
+
+## Upgrade an older database
+
+TMDBHelper doesn't alter its tables when its schema version rises. It drops the tables that changed and recreates them empty, and version 54 drops every item table. To keep a version 51 cache, copy it into a new file at the current version:
+
+```bash
+warmup-rs --mode=upgrade --item-details-db output/ItemDetails.db
+```
+
+This reads `ItemDetails.db` without changing it and writes `ItemDetails.v55.db` next to it. Replace the old file with the new one once you've checked it. Every item gets a deletion lease of at least 31 days, so the add-on's cleanup keeps it until warmup-rs or the add-on refreshes it.
 
 Both databases use a write-ahead log, so copy them only after you merge it:
 

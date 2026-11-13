@@ -13,10 +13,7 @@ fn client() -> TmdbClient {
 #[ignore = "calls TMDB and needs TMDB_API_KEY"]
 async fn every_item_type_writes_from_a_real_response() {
     let client = client();
-    let ctx = WriteContext {
-        language: "en-US".into(),
-        genres: client.get_genres().await.unwrap(),
-    };
+    let ctx = WriteContext::new("en-US".into(), client.get_genres().await.unwrap());
     let (conn, _) = common::scratch_db();
     mapper::write_movie(&conn, &ctx, &client.get_movie(550).await.unwrap()).unwrap();
     let tv = client.get_tv(1396).await.unwrap();

@@ -18,7 +18,8 @@ Examples:
   warmup-rs --mode=smoke
   WARMUP_TMDB_API_KEY=<key> warmup-rs
   WARMUP_TMDB_API_KEY=<key> warmup-rs --all-ids
-  warmup-rs --mode=images --concurrency=25";
+  warmup-rs --mode=images --concurrency=25
+  warmup-rs --mode=upgrade --upgrade-to ItemDetails.v55.db";
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum)]
 enum Mode {
@@ -30,6 +31,8 @@ enum Mode {
     Fanart,
     /// check that the binary runs, then exit without side effects.
     Smoke,
+    /// copy an older ItemDetails.db into a new file with the current schema.
+    Upgrade,
 }
 
 #[derive(Parser, Debug)]
@@ -95,6 +98,11 @@ struct Args {
     /// Folder for downloaded images, used in images mode.
     #[arg(long, env = "WARMUP_THUMBNAILS_DIR")]
     thumbnails_dir: Option<PathBuf>,
+
+    /// Where upgrade mode writes the new file. It reads --item-details-db and
+    /// never changes it. Defaults to ItemDetails.v<version>.db next to it.
+    #[arg(long, env = "WARMUP_UPGRADE_TO")]
+    upgrade_to: Option<PathBuf>,
 }
 
 #[tokio::main]
@@ -140,7 +148,7 @@ async fn main() -> anyhow::Result<()> {
         batch_size
     );
 
-    if args.mode != Mode::Smoke && platform == Platform::Desktop {
+    if !matches!(args.mode, Mode::Smoke | Mode::Upgrade) && platform == Platform::Desktop {
         paths::ensure_dirs(&paths)?;
         if paths::create_item_details_if_missing(&paths.item_details_db)? {
             info!(
@@ -197,6 +205,18 @@ async fn main() -> anyhow::Result<()> {
                 min_free_bytes,
             })
             .await?;
+        }
+        Mode::Upgrade => {
+            let target = args.upgrade_to.unwrap_or_else(|| {
+                paths.item_details_db.with_file_name(format!(
+                    "ItemDetails.v{}.db",
+                    warmup_rs::cache::SCHEMA_VERSION
+                ))
+            });
+            tokio::task::spawn_blocking(move || {
+                warmup_rs::upgrade::run(&paths.item_details_db, &target)
+            })
+            .await??;
         }
         Mode::Smoke => {
             let _ = rusqlite::Connection::open_in_memory()?;

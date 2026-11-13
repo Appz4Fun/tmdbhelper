@@ -8,10 +8,7 @@ use std::collections::HashMap;
 use warmup_rs::cache::{mapper, WriteContext, SCHEMA_VERSION};
 
 fn ctx() -> WriteContext {
-    WriteContext {
-        language: "en-US".into(),
-        genres: HashMap::from([(18, "Drama".to_owned())]),
-    }
+    WriteContext::new("en-US".into(), HashMap::from([(18, "Drama".to_owned())]))
 }
 
 fn value(conn: &Connection, sql: &str) -> Option<String> {
